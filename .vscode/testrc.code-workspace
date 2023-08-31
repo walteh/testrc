@@ -1,0 +1,83 @@
+{
+	"folders": [
+		{
+			"path": "..",
+			"name": "root"
+		},
+	],
+	"settings": {
+		/* //////////////////////////////////////////////
+							VSCODE
+		////////////////////////////////////////////// */
+		"workbench.tree.indent": 16,
+		"editor.formatOnSave": true,
+		"search.useIgnoreFiles": true,
+		"debug.console.wordWrap": false,
+		/* //////////////////////////////////////////////
+							FILES
+		////////////////////////////////////////////// */
+		"material-icon-theme.folders.associations": {
+			"dynamo": "database",
+			"mw": "middleware",
+			"ecs": "container",
+			"logs": "batch",
+			"blocks": "queue",
+			"structure": "database",
+			"events": "api",
+			"integrity": "admin",
+			"internal": "core",
+		},
+		"material-icon-theme.files.associations": {
+			".buildrc": "auto",
+			"*.bats": "tune",
+			"justfile": "Makefile",
+		},
+		"files.exclude": {
+			"terraform/": true,
+			".plan": true,
+			"**/.git": true,
+			"**/vendor": true,
+		},
+		"files.associations": {
+			".buildrc": "yaml",
+		},
+		/* //////////////////////////////////////////////
+							  GO
+		////////////////////////////////////////////// */
+		"go.testTimeout": "90s",
+		"go.enableCodeLens": {
+			"references": true,
+		},
+		/* //////////////////////////////////////////////
+							YAML
+		////////////////////////////////////////////// */
+		"yaml.format.enable": true,
+		"[yaml]": {
+			"editor.defaultFormatter": "redhat.vscode-yaml",
+			"editor.bracketPairColorization.enabled": true,
+			"editor.formatOnSave": true,
+		},
+		"yaml.style.flowSequence": "allow",
+		"yaml.style.flowMapping": "allow",
+		"yaml.format.proseWrap": "preserve",
+		"yaml.format.singleQuote": false,
+		"yaml.extension.recommendations": true,
+		/* //////////////////////////////////////////////
+							TERRAFORM
+		////////////////////////////////////////////// */
+		"terraform.codelens.referenceCount": false,
+		"terraform.languageServer.enable": true,
+		"terraform.experimentalFeatures.validateOnSave": true,
+		"[terraform]": {
+			"editor.formatOnSave": false,
+		},
+		"emeraldwalk.runonsave": {
+			"commands": [
+				{
+					"match": "\\.tf$|\\.tfvars$",
+					"cmd": "tftab \"${file}\""
+				},
+			]
+		},
+	}
+}
