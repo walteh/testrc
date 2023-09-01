@@ -16,7 +16,7 @@ func withArgs(args ...string) cmdOpt {
 }
 
 func mainCmd(sb integration.Sandbox, opts ...cmdOpt) *exec.Cmd {
-	cmd := exec.Command("buildrc")
+	cmd := exec.Command("testrc")
 	cmd.Env = append([]string{}, os.Environ()...)
 	for _, opt := range opts {
 		opt(cmd)

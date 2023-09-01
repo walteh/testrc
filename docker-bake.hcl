@@ -31,8 +31,6 @@ target "_common" {
 	}
 }
 
-
-
 group "default" {
 	targets = ["binaries"]
 }
@@ -104,7 +102,6 @@ target "outdated" {
 	target          = "outdated-output"
 	output          = ["${DESTDIR}/outdated"]
 }
-
 
 target "test" {
 	inherits = ["_common"]

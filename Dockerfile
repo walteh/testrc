@@ -43,7 +43,7 @@ RUN --mount=type=bind,target=/src \
 	mkdir -p /binary-cache
 	echo "checking for binary cache in /src/rebin/$(cat /meta/artifact).tar.gz"
 	if [ -f "/src/rebin/$(cat /meta/artifact).tar.gz" ]; then
-		 echo "found binary cache in /src/rebin/$(cat /meta/artifact).tar.gz";
+		echo "found binary cache in /src/rebin/$(cat /meta/artifact).tar.gz";
 		tar xzf "/src/rebin/$(cat /meta/artifact).tar.gz" -C /binary-cache;
 	fi
 EOT

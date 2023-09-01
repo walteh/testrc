@@ -12,8 +12,8 @@ binaries:
 binaries-cross:
     docker buildx bake binaries-cross
 
-release:
-    ./hack/release
+release PLATFORM TARGET:
+    ./hack/release $(PLATFORM) $(TARGET)
 
 lint:
     docker buildx bake lint
