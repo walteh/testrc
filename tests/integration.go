@@ -7,6 +7,8 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 )
 
+type Dummy interface{}
+
 type cmdOpt func(*exec.Cmd)
 
 func withArgs(args ...string) cmdOpt {

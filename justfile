@@ -12,7 +12,7 @@ binaries:
 binaries-cross:
     docker buildx bake binaries-cross
 
-release PLATFORM TARGET:
+release:
     ./hack/release $(PLATFORM) $(TARGET)
 
 lint:
@@ -38,7 +38,7 @@ outdated:
 	cat ./bin/outdated/outdated.txt
 
 gen:
-    docker buildx bake update-gen --progress plain
+    docker buildx bake update-gen
 
 test-driver:
     ./hack/test-driver

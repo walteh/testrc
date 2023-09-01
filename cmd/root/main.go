@@ -25,8 +25,8 @@ var _ snake.Snakeable = (*Root)(nil)
 
 func (me *Root) BuildCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "buildrc",
-		Short: "buildrc is a tool to help with building releases",
+		Use:   "testrc",
+		Short: "testrc is a tool to help with testing releases",
 	}
 
 	cmd.PersistentFlags().BoolVarP(&me.Quiet, "quiet", "q", false, "Do not print any output")

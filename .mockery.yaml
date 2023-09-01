@@ -6,16 +6,5 @@
     outpkg: mockery,
     filename: "{{.InterfaceName}}.{{.PackageName}}.mockery.go",
     mockname: "Mock{{.InterfaceName}}_{{.PackageName}}",
-    packages:
-        {
-            github.com/walteh/buildrc/pkg/git:
-                {
-                    interfaces:
-                        {
-                            GitProvider: {},
-                            ReleaseProvider: {},
-                            PullRequestProvider: {},
-                        },
-                },
-        },
+    packages: { github.com/walteh/testrc/tests: { interfaces: { Dummy: {} } } },
 }
