@@ -50,7 +50,7 @@ test-unit:
     TESTPKGS=./... SKIP_INTEGRATION_TESTS=1 ./hack/test
 
 test-integration:
-    TESTPKGS=./tests ./hack/test
+	TEST_DOCKERD=1 TESTFLAGS="--run=//worker=docker-container" TESTPKGS=./tests ./hack/test
 
 local:
 	docker buildx bake image-default --progress plain

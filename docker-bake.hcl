@@ -15,11 +15,11 @@ variable "GENDIR" {
 
 
 variable "DOCKER_IMAGE" {
-	default = "walteh/buildrc"
+	default = "walteh/testrc"
 }
 
 variable "BIN_NAME" {
-	default = "buildrc"
+	default = "testrc"
 }
 
 target "_common" {

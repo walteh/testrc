@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/docker/buildx/tests/workers"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/util/testutil/integration"
 	bkworkers "github.com/moby/buildkit/util/testutil/workers"
+	"github.com/walteh/testrc/tests/workers"
 )
 
 func init() {
@@ -25,7 +25,7 @@ func TestIntegration(t *testing.T) {
 	// tests = append(tests, bakeTests...)
 	// tests = append(tests, inspectTests...)
 	// tests = append(tests, lsTests...)
-	// tests = append(tests, imagetoolsTests...)
+	tests = append(tests, dynamoTests...)
 	tests = append(tests, versionTests...)
 	testIntegration(t, tests...)
 }
@@ -41,6 +41,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 			}
 		}
 	}
+	mirroredImages["amazon/dynamodb-local:latest"] = "docker.io/amazon/dynamodb-local:latest"
 	mirroredImages["moby/buildkit:buildx-stable-1"] = buildkitImage
 	mirrors := integration.WithMirroredImages(mirroredImages)
 	tests := integration.TestFuncs(funcs...)

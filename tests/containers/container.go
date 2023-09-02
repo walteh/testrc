@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/k0kubun/pp/v3"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/ory/dockertest/v3"
 )
@@ -26,15 +27,15 @@ type ContainerStore struct {
 	resource *dockertest.Resource
 }
 
-var registry = make([]Container, 0)
+// var registry = make([]Container, 0)
 var containers = make(map[string]*ContainerStore, 0)
 
-func RegisterContainer[C Container](container C) C {
+// func RegisterContainer[C Container](container C) C {
 
-	registry = append(registry, container)
+// 	registry = append(registry, container)
 
-	return container
-}
+// 	return container
+// }
 
 func GetHttp(container Container) string {
 	repo, _, _, _ := container.MockContainerConfig()
@@ -73,7 +74,7 @@ func GetHttpsHost(container Container) string {
 // 	return res
 // }
 
-func Roll(ctx context.Context, sb integration.Sandbox) (func() error, error) {
+func Roll(ctx context.Context, sb integration.Sandbox, reg []Container) (func() error, error) {
 	fmt.Println()
 	fmt.Println("===============================================")
 	fmt.Println("|  Starting Mock Containers...")
@@ -81,11 +82,46 @@ func Roll(ctx context.Context, sb integration.Sandbox) (func() error, error) {
 
 	start := time.Now()
 
-	addr := sb.DockerAddress()
+	// addr := sb.Address()
 
-	addr = strings.Replace(addr, "tcp://", "http://", 1)
+	// addr = strings.Replace(addr, "tcp://", "http://", 1)
 
-	pp.Println("SB", addr, sb)
+	// pp.Println("SB", addr, sb)
+	ccc := exec.CommandContext(ctx, "dockerd")
+	ccc.Stdout = os.Stdout
+	ccc.Stderr = os.Stderr
+	err := ccc.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			ccc.Process.Kill()
+			return nil, fmt.Errorf("dockerd timed out")
+		default:
+			pool, err := dockertest.NewPool("")
+			if err != nil {
+				log.Fatalf("Could not construct pool: %s", err)
+			}
+			// uses pool to try to connect to Docker
+			err = pool.Client.Ping()
+			if err == nil {
+				goto L
+			}
+
+			// if err := sb.(ctx); err == nil {
+			// 	goto L
+			// }
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+L:
+
+	defer func() {
+		ccc.Process.Kill()
+	}()
 
 	// dirname, err := os.UserHomeDir()
 	// if err != nil {
@@ -93,7 +129,7 @@ func Roll(ctx context.Context, sb integration.Sandbox) (func() error, error) {
 	// }
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	// pool, err := dockertest.NewPool(fmt.Sprintf("unix:///%s/.colima/default/docker.sock", dirname))
-	pool, err := dockertest.NewPool(addr)
+	pool, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("Could not construct pool: %s", err)
 	}
@@ -108,7 +144,7 @@ func Roll(ctx context.Context, sb integration.Sandbox) (func() error, error) {
 
 	grp := sync.WaitGroup{}
 
-	for _, container := range registry {
+	for _, container := range reg {
 
 		repo, http, https, env := container.MockContainerConfig()
 

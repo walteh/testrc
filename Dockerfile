@@ -3,10 +3,10 @@
 ARG GO_VERSION=1.21.0
 ARG XX_VERSION=1.2.1
 
-ARG DOCKER_VERSION=24.0.2
+ARG DOCKER_VERSION=24.0.5
 ARG GOTESTSUM_VERSION=v1.9.0
-ARG REGISTRY_VERSION=2.8.0
-ARG BUILDKIT_VERSION=v0.11.6
+ARG REGISTRY_VERSION=latest
+ARG BUILDKIT_VERSION=nightly
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
@@ -23,11 +23,14 @@ ENV GOFLAGS=-mod=vendor
 ENV CGO_ENABLED=0
 WORKDIR /src
 
-FROM registry:$REGISTRY_VERSION AS registry
+FROM --platform=$BUILDPLATFORM registry:$REGISTRY_VERSION AS registry
 
-FROM moby/buildkit:$BUILDKIT_VERSION AS buildkit
+FROM --platform=$BUILDPLATFORM moby/buildkit:$BUILDKIT_VERSION AS buildkit
 
-FROM docker/buildx-bin:latest AS buildx-bin
+FROM --platform=$BUILDPLATFORM docker/buildx-bin:latest AS buildx-bin
+
+FROM --platform=$BUILDPLATFORM docker/compose-bin:latest AS compose-bin
+
 
 FROM gobase AS meta
 ARG TARGETPLATFORM
@@ -151,8 +154,9 @@ COPY --link --from=buildkit /usr/bin/buildkitd /usr/bin/
 COPY --link --from=buildkit /usr/bin/buildctl /usr/bin/
 COPY --link --from=binaries /${BIN_NAME} /usr/bin/
 COPY --link --from=buildx-bin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+COPY --link  --from=compose-bin /docker-compose /usr/libexec/docker/cli-plugins/docker-compose
 
-FROM integration-test-base AS helper
+FROM integration-test-base AS integration-test
 COPY . .
 
 ##################################################################
@@ -182,7 +186,7 @@ FROM binaries
 # IMAGE
 ##################################################################
 
-FROM helper AS entry
+FROM integration-test-base AS entry
 COPY --link --from=meta /meta /meta
 COPY --link --from=builder /usr/bin/$(cat meta/name) /usr/bin/
 ENTRYPOINT [ "/usr/bin/$(cat meta/meta)" ]

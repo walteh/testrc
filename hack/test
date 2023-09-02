@@ -9,7 +9,7 @@ set -eu -o pipefail
 : "${TEST_IMAGE_ID=${BIN_NAME}-tests}"
 
 : "${TEST_REPORT_SUFFIX=}"
-: "${TEST_KEEP_CACHE=}"
+: "${TEST_KEEP_CACHE=1}"
 : "${TEST_DOCKERD=}"
 : "${TEST_BUILDKIT_IMAGE=}"
 
@@ -26,23 +26,46 @@ gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_S
 echo "Running tests with $TEST_IMAGE_ID"
 
 cacheVolume="${BIN_NAME}-test-cache"
-volumeArgs="--volumes-from=$cacheVolume"
+# volumeArgs="--volumes-from=$cacheVolume"
 
-if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
-	echo "Attempting to create cache volume $cacheVolume"
-	if docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod --name "$cacheVolume" alpine:latest; then
+# Function to create Docker volume with appropriate paths
+create_docker_volume() {
+	local volumeArgs="$1"
+	if docker --debug create $volumeArgs --name "$cacheVolume" alpine:latest; then
 		echo "Cache volume created successfully."
 		if [ "$TEST_KEEP_CACHE" != "1" ]; then
 			echo "Cleaning up cache volume $cacheVolume"
-			trap 'docker rm -v $cacheVolume || echo "problem ro"' EXIT
+			trap 'docker rm -v $cacheVolume || echo "problem removing volume"' EXIT
 		fi
 	else
 		echo "Warning: Failed to create cache volume. Proceeding without cache. This may be slow."
-		volumeArgs="-v /root/.cache -v /root/.cache/registry -v /go/pkg/mod"
+		docker rmi alpine:latest >/dev/null 2>/dev/null || true
 	fi
+}
+
+# Check if the cache volume already exists
+if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
+	echo "Attempting to create cache volume $cacheVolume"
+
+	# # Identify the operating system
+	# OS=$(uname)
+
+	# # Set volume paths based on the operating system
+	# if [ "$OS" = "Linux" ]; then
+	volumeArgs="-v /root/.cache -v /root/.cache/registry -v /go/pkg/mod"
+	# # elif [ "$OS" = "Darwin" ]; then # macOS
+	# 	volumeArgs="-v /Users/$(whoami)/.cache:/root/.cache -v /Users/$(whoami)/.cache/registry:/root/.cache/registry  -v /Users/$(whoami)/go/pkg/mod:/go/pkg/mod"
+	# 	echo "$volumeArgs"
+	# else
+	# 	echo "Unsupported OS: $OS"
+	# 	exit 1
+	# fi
+
+	# Create the Docker volume
+	create_docker_volume "$volumeArgs"
 fi
 
 echo "Starting tests with $TEST_IMAGE_ID"
 
-cid=$(docker create --rm -v /tmp $testReportsVol $volumeArgs -e GITHUB_REF -e TEST_DOCKERD -e TEST_BUILDKIT_IMAGE -e SKIP_INTEGRATION_TESTS -e GOTESTSUM_FORMAT ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $TEST_IMAGE_ID gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
+cid=$(docker create --rm -v /tmp $testReportsVol --volumes-from=$cacheVolume -e GITHUB_REF -e TEST_DOCKERD -e TEST_BUILDKIT_IMAGE -e SKIP_INTEGRATION_TESTS -e GOTESTSUM_FORMAT ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $TEST_IMAGE_ID gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
 docker start -a -i $cid

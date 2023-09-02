@@ -13,7 +13,7 @@ import (
 )
 
 var dynamoTests = []func(t *testing.T, sb integration.Sandbox){
-	testVersion,
+	testDynamo,
 }
 
 func testDynamo(t *testing.T, sb integration.Sandbox) {
@@ -22,8 +22,10 @@ func testDynamo(t *testing.T, sb integration.Sandbox) {
 
 	ctx := sb.Context()
 
-	cont, err := containers.Roll(ctx, sb)
+	cont, err := containers.Roll(ctx, sb, []containers.Container{&mock})
 	require.NoError(t, err)
+
+	defer cont()
 
 	cmd := mainCmd(sb, withArgs("--version"))
 	out, err := cmd.CombinedOutput()
