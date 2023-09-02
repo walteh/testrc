@@ -1,17 +1,18 @@
 package containers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/moby/buildkit/util/testutil/integration"
+
 	"github.com/ory/dockertest/v3"
 )
 
@@ -82,46 +83,50 @@ func Roll(ctx context.Context, sb integration.Sandbox, reg []Container) (func() 
 
 	start := time.Now()
 
+	ok, err := dockerd.NewDaemon("")
+	if err != nil {
+		log.Fatalf("Could not start daemon: %s", err)
+	}
+
+	logs := map[string]*bytes.Buffer{}
+
+	err = ok.StartWithError(logs)
+	if err != nil {
+		log.Fatalf("Could not start daemon: %s", err)
+	}
+	go func() {
+		// read logs
+		for {
+			time.Sleep(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				for k, v := range logs {
+					if v.Len() == 0 {
+						continue
+					}
+					fmt.Printf("|  %s: %s\n", k, v.String())
+					v.Reset()
+				}
+			}
+		}
+	}()
+
+	defer func() {
+		err := ok.StopWithError()
+		if err != nil {
+			log.Println("error stopping daemon: ", err)
+		}
+	}()
+
+	<-time.After(5 * time.Second)
+
 	// addr := sb.Address()
 
 	// addr = strings.Replace(addr, "tcp://", "http://", 1)
 
 	// pp.Println("SB", addr, sb)
-	ccc := exec.CommandContext(ctx, "dockerd")
-	ccc.Stdout = os.Stdout
-	ccc.Stderr = os.Stderr
-	err := ccc.Start()
-	if err != nil {
-		return nil, err
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			ccc.Process.Kill()
-			return nil, fmt.Errorf("dockerd timed out")
-		default:
-			pool, err := dockertest.NewPool("")
-			if err != nil {
-				log.Fatalf("Could not construct pool: %s", err)
-			}
-			// uses pool to try to connect to Docker
-			err = pool.Client.Ping()
-			if err == nil {
-				goto L
-			}
-
-			// if err := sb.(ctx); err == nil {
-			// 	goto L
-			// }
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-L:
-
-	defer func() {
-		ccc.Process.Kill()
-	}()
 
 	// dirname, err := os.UserHomeDir()
 	// if err != nil {
@@ -129,7 +134,7 @@ L:
 	// }
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	// pool, err := dockertest.NewPool(fmt.Sprintf("unix:///%s/.colima/default/docker.sock", dirname))
-	pool, err := dockertest.NewPool("")
+	pool, err := dockertest.NewPool(ok.Sock())
 	if err != nil {
 		log.Fatalf("Could not construct pool: %s", err)
 	}
