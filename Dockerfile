@@ -83,11 +83,7 @@ FROM binaries-$TARGETOS AS binaries
 # enable scanning for this stage
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
-FROM binaries AS entry
-ARG BIN_NAME
-ENV BIN_NAME=${BIN_NAME}
-COPY --link --from=builder /usr/bin/${BIN_NAME} /usr/bin/${BIN_NAME}
-ENTRYPOINT [ "/usr/bin/${BIN_NAME}" ]
+
 
 ##################################################################
 # TESTING
@@ -156,7 +152,7 @@ COPY --link --from=buildkit /usr/bin/buildctl /usr/bin/
 COPY --link --from=binaries /${BIN_NAME} /usr/bin/
 COPY --link --from=buildx-bin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
-FROM integration-test-base AS integration-test
+FROM integration-test-base AS helper
 COPY . .
 
 ##################################################################
@@ -181,3 +177,12 @@ COPY --from=releaser /out/ /
 COPY --from=meta /meta/buildrc.json /buildrc.json
 
 FROM binaries
+
+##################################################################
+# IMAGE
+##################################################################
+
+FROM helper AS entry
+COPY --link --from=meta /meta /meta
+COPY --link --from=builder /usr/bin/$(cat meta/name) /usr/bin/
+ENTRYPOINT [ "/usr/bin/$(cat meta/meta)" ]

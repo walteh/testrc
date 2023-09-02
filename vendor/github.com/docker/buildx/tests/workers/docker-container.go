@@ -2,7 +2,6 @@ package workers
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"sync"
@@ -20,8 +19,6 @@ func InitDockerContainerWorker() {
 
 type containerWorker struct {
 	id string
-
-	unsupported []string
 
 	docker      integration.Backend
 	dockerClose func() error
@@ -46,24 +43,18 @@ func (w *containerWorker) New(ctx context.Context, cfg *integration.BackendConfi
 	}
 
 	name := "integration-container-" + identity.NewID()
-	cmd := exec.Command("docker", "buildx", "create",
+	cmd := exec.Command("buildx", "create",
 		"--bootstrap",
 		"--name="+name,
 		"--config="+cfg.ConfigFile,
 		"--driver=docker-container",
 		"--driver-opt=network=host",
 	)
-
 	cmd.Env = append(
 		os.Environ(),
 		"BUILDX_CONFIG=/tmp/buildx-"+name,
 		"DOCKER_CONTEXT="+w.docker.DockerAddress(),
 	)
-	fmt.Println(cmd.String())
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	if err := cmd.Run(); err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to create buildx instance %s", name)
 	}
@@ -74,9 +65,8 @@ func (w *containerWorker) New(ctx context.Context, cfg *integration.BackendConfi
 	}
 
 	return &backend{
-		context:             w.docker.DockerAddress(),
-		builder:             name,
-		unsupportedFeatures: w.unsupported,
+		context: w.docker.DockerAddress(),
+		builder: name,
 	}, cl, nil
 }
 

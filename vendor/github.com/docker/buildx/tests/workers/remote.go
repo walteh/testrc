@@ -2,7 +2,6 @@ package workers
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 
@@ -18,8 +17,7 @@ func InitRemoteWorker() {
 }
 
 type remoteWorker struct {
-	id          string
-	unsupported []string
+	id string
 }
 
 func (w remoteWorker) Name() string {
@@ -38,19 +36,13 @@ func (w remoteWorker) New(ctx context.Context, cfg *integration.BackendConfig) (
 	}
 
 	name := "integration-remote-" + identity.NewID()
-	cmd := exec.Command("docker", "buildx", "create",
+	cmd := exec.Command("buildx", "create",
 		"--bootstrap",
 		"--name="+name,
 		"--driver=remote",
 		bk.Address(),
 	)
 	cmd.Env = append(os.Environ(), "BUILDX_CONFIG=/tmp/buildx-"+name)
-
-	fmt.Println(cmd.String())
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	if err := cmd.Run(); err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to create buildx instance %s", name)
 	}
@@ -68,8 +60,7 @@ func (w remoteWorker) New(ctx context.Context, cfg *integration.BackendConfig) (
 	}
 
 	return &backend{
-		builder:             name,
-		unsupportedFeatures: w.unsupported,
+		builder: name,
 	}, cl, nil
 }
 

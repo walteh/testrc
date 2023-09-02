@@ -4,8 +4,6 @@ dario.cat/mergo
 # github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
 ## explicit; go 1.18
 github.com/AdaLogics/go-fuzz-headers
-# github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161
-## explicit; go 1.16
 # github.com/Masterminds/semver/v3 v3.2.1
 ## explicit; go 1.18
 github.com/Masterminds/semver/v3
@@ -96,11 +94,14 @@ github.com/cyphar/filepath-securejoin
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
+# github.com/docker/buildx v0.11.2
+## explicit; go 1.20
+github.com/docker/buildx/tests/workers
 # github.com/docker/distribution v2.8.2+incompatible
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v24.0.0-rc.2.0.20230718135204-8e51b8b59cb8+incompatible
+# github.com/docker/docker v24.0.5-0.20230714235725-36e9e796c6fc+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -115,7 +116,6 @@ github.com/docker/docker/api/types/registry
 github.com/docker/docker/api/types/strslice
 github.com/docker/docker/api/types/swarm
 github.com/docker/docker/api/types/swarm/runtime
-github.com/docker/docker/api/types/system
 github.com/docker/docker/api/types/time
 github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
@@ -266,7 +266,7 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.19
 ## explicit; go 1.15
 github.com/mattn/go-isatty
-# github.com/moby/buildkit v0.12.2
+# github.com/moby/buildkit v0.12.2 => github.com/moby/buildkit v0.12.1-0.20230831174303-e2dfabdebce2
 ## explicit; go 1.20
 github.com/moby/buildkit/cmd/buildkitd/config
 github.com/moby/buildkit/identity
@@ -281,6 +281,7 @@ github.com/moby/buildkit/util/resolver/retryhandler
 github.com/moby/buildkit/util/stack
 github.com/moby/buildkit/util/testutil/dockerd
 github.com/moby/buildkit/util/testutil/integration
+github.com/moby/buildkit/util/testutil/workers
 github.com/moby/buildkit/version
 # github.com/moby/locker v1.0.1
 ## explicit; go 1.13
@@ -324,7 +325,7 @@ github.com/sergi/go-diff/diffmatchpatch
 # github.com/shibumi/go-pathspec v1.3.0
 ## explicit; go 1.17
 github.com/shibumi/go-pathspec
-# github.com/sirupsen/logrus v1.9.0
+# github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 # github.com/skeema/knownhosts v1.2.0
@@ -353,7 +354,6 @@ github.com/stretchr/testify/require
 # github.com/walteh/buildrc v0.12.7
 ## explicit; go 1.21.0
 github.com/walteh/buildrc/pkg/git
-github.com/walteh/buildrc/tests/workers
 github.com/walteh/buildrc/version
 # github.com/walteh/snake v0.5.0
 ## explicit; go 1.21.0
@@ -554,3 +554,4 @@ gopkg.in/warnings.v0
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
+# github.com/moby/buildkit => github.com/moby/buildkit v0.12.1-0.20230831174303-e2dfabdebce2

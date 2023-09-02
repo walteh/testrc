@@ -321,6 +321,7 @@ jobs:
                   files: |
                       ./docker-bake.hcl
                   targets: binaries
+
     validate:
         runs-on: ubuntu-22.04
         needs: [prepare-binaries]
