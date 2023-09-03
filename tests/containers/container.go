@@ -119,37 +119,6 @@ func WaitOnDaemon() error {
 
 		signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
 
-		go func() {
-			<-osSignal
-			fmt.Println()
-			fmt.Println("===============================================")
-			fmt.Println("|  Stopping Mock Containers...")
-			fmt.Println("|")
-
-			grp := sync.WaitGroup{}
-
-			for _, c := range containers {
-				grp.Add(1)
-				go func(c *ContainerStore) {
-					defer func() {
-						grp.Done()
-						fmt.Printf("|  🛑 %s is stopped\n", c.resource.Container.AppArmorProfile)
-					}()
-					// You can't defer this because os.Exit doesn't care for defer
-					if err := pool.Purge(c.resource); err != nil {
-						log.Fatalf("Could not purge resource: %s", err)
-					}
-				}(c)
-			}
-
-			grp.Wait()
-			fmt.Println("|")
-			fmt.Println("|  mock containers stopped")
-			fmt.Println("===============================================")
-			fmt.Println()
-			os.Exit(0)
-		}()
-
 		log.Printf("docker pool ready")
 
 		ready <- nil
@@ -176,7 +145,6 @@ func SetContainer(container ContainerImage, store *ContainerStore) {
 }
 
 func (me *ContainerStore) GetHttpHost() string {
-	// return strings.Replace(GetContainer(container).http, "http://", "", 1)
 	return me.http
 }
 
@@ -277,4 +245,8 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		Msg("Mock containers started")
 
 	return newContainer, nil
+}
+
+func (me *ContainerStore) Close() error {
+	return pool.Purge(me.resource)
 }

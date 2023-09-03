@@ -175,8 +175,8 @@ target "meta-helper" {
 
 target "integration-test" {
 	inherits   = ["_common"]
-	target = "integration-test"
-	output     = ["type=cacheonly"]
+	target = "test"
+	output     = ["type=docker,name=integration-test"]
 }
 
 target "integration" {

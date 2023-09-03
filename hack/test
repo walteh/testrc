@@ -2,9 +2,11 @@
 
 set -eu -o pipefail
 
+: "${PACKAGES=./...}"
+
 gotestsum \
 	--format=standard-verbose \
 	--packages="$PACKAGES" \
 	--jsonfile=/testreports/go-test-report.json \
 	--junitfile=/testreports/junit-report.xml \
-	-- -v -mod=vendor -coverprofile=/testreports/coverage-report.txt -covermode=atomic ./...
+	-- -v -mod=vendor -coverprofile=/testreports/coverage-report.txt -covermode=atomic "$PACKAGES"

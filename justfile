@@ -65,8 +65,6 @@ generate: vendor docs gen
 
 validate: lint outdated validate-vendor validate-docs validate-gen
 
-
-
 integration:
-	docker buildx bake integration-test --set "*.output=type=docker,name=integ-tests"
-	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock "integ-tests"
+	docker buildx bake integration-test
+	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock integration-test
