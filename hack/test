@@ -7,6 +7,6 @@ set -eu -o pipefail
 gotestsum \
 	--format=standard-verbose \
 	--packages="$PACKAGES" \
-	--jsonfile=/testreports/go-test-report.json \
-	--junitfile=/testreports/junit-report.xml \
-	-- -v -mod=vendor -coverprofile=/testreports/coverage-report.txt -covermode=atomic "$PACKAGES"
+	--jsonfile=/out/testreports/go-test-report.json \
+	--junitfile=/out/testreports/junit-report.xml \
+	-- -v -mod=vendor -coverprofile=/out/testreports/coverage-report.txt -covermode=atomic "$PACKAGES"

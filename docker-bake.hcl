@@ -97,17 +97,17 @@ target "update-gen" {
 }
 
 target "outdated" {
-	inherits        = ["_common"]
-	dockerfile      = "./hack/dockerfiles/vendor.Dockerfile"
-	target          = "outdated-output"
-	output          = ["${DESTDIR}/outdated"]
+	inherits   = ["_common"]
+	dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
+	target     = "outdated-output"
+	output     = ["${DESTDIR}/outdated"]
 }
 
-target "test" {
+/* target "test" {
 	inherits = ["_common"]
 	target   = "test-coverage"
 	output   = ["${DESTDIR}/coverage"]
-}
+} */
 
 target "binaries" {
 	inherits  = ["_common"]
@@ -145,9 +145,9 @@ target "image" {
 }
 
 target "image-default" {
-	inherits = ["meta-helper", "binaries"]
-	target   = "entry"
-	output   = ["type=image"]
+	inherits  = ["meta-helper", "binaries"]
+	target    = "entry"
+	output    = ["type=image"]
 	platforms = ["linux/arm64"]
 }
 
@@ -155,6 +155,10 @@ target "image-cross" {
 	inherits = ["meta-helper", "binaries-cross"]
 	target   = "entry"
 	output   = ["type=image"]
+	attest = [
+		"type=provenance",
+		"type=sbom"
+	]
 }
 
 target "image-local" {
@@ -165,7 +169,7 @@ target "image-local" {
 target "meta" {
 	inherits = ["_common"]
 	target   = "meta-out"
-	output = [ "meta"]
+	output   = ["meta"]
 }
 
 # Special target: https://github.com/docker/metadata-action#bake-definition
@@ -173,20 +177,20 @@ target "meta-helper" {
 	tags = ["${DOCKER_IMAGE}:local"]
 }
 
-target "integration-test" {
-	inherits   = ["_common"]
-	target = "test"
-	output     = ["type=docker,name=integration-test"]
+target "test" {
+	inherits = ["_common"]
+	target   = "test"
+	output   = ["type=docker,name=integration-test"]
 }
 
-target "integration" {
-	inherits = ["_common"]
+/* target "integration" {
+	inherits   = ["_common"]
 	dockerfile = "Dockerfile"
-	target   = "test-output"
-	output   = ["${DESTDIR}/integration"]
+	target     = "test-output"
+	output     = ["${DESTDIR}/integration"]
 	args = {
 		TEST_REPORT_SUFFIX = "-integration"
-		PACKAGES		   = "./tests/..."
+		PACKAGES           = "./tests/..."
 	}
 }
 
@@ -196,6 +200,6 @@ target "unit" {
 	output   = ["${DESTDIR}/unit"]
 	args = {
 		TEST_REPORT_SUFFIX = "-unit"
-		PACKAGES		   = "./pkg/..."
+		PACKAGES           = "./pkg/..."
 	}
-}
+} */

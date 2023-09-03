@@ -117,7 +117,7 @@ ARG PACKAGES
 ENV PACKAGES=${PACKAGES:-./...}
 ARG BIN_NAME
 ENV BIN_NAME=${BIN_NAME}
-ENTRYPOINT [ "sh", "hack/test"]
+ENTRYPOINT ["sh", "hack/test"]
 
 FROM scratch AS test-output
 COPY --from=test /testreports /testreports
@@ -149,7 +149,9 @@ FROM binaries
 # IMAGE
 ##################################################################
 
-FROM integration-test-base AS entry
+FROM scratch AS entry
+ARG BIN_NAME
+ENV BIN_NAME=${BIN_NAME}
 COPY --link --from=meta /meta /meta
 COPY --link --from=builder /usr/bin/$(cat meta/name) /usr/bin/
-ENTRYPOINT [ "/usr/bin/$(cat meta/meta)" ]
+ENTRYPOINT [ "/usr/bin/${BIN_NAME}" ]

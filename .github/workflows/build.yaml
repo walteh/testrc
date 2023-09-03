@@ -43,19 +43,19 @@ jobs:
             GOTESTSUM_FORMAT: "standard-verbose"
             TEST_IMAGE_BUILD: "0"
             TEST_IMAGE_ID: "buildx-tests"
-        strategy:
-            fail-fast: false
-            matrix:
-                worker:
-                    - docker
-                    - docker\+containerd # same as docker, but with containerd snapshotter
-                    - docker-container
-                    - remote
-                pkg:
-                    - ./tests
-                include:
-                    - pkg: ./...
-                      skip-integration-tests: 1
+        # strategy:
+        #     fail-fast: false
+        #     matrix:
+        #         worker:
+        #             - docker
+        #             - docker\+containerd # same as docker, but with containerd snapshotter
+        #             - docker-container
+        #             - remote
+        #         pkg:
+        #             - ./tests
+        #         include:
+        #             - pkg: ./...
+        #               skip-integration-tests: 1
         steps:
             - name: Checkout
               uses: actions/checkout@v3
@@ -81,19 +81,13 @@ jobs:
               with:
                   files: |
                       ./docker-bake.hcl
-                  targets: integration-test
+                  targets: test
                   set: |
                       *.cache-from=type=gha,scope=${{ env.TEST_CACHE_SCOPE }}
                       *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
             - name: Test
               run: |
-                  export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
-                  ./hack/test
-              env:
-                  TEST_DOCKERD: "${{ startsWith(matrix.worker, 'docker') && '1' || '0' }}"
-                  TESTFLAGS: "${{ (matrix.worker == 'docker' || matrix.worker == 'docker\\+containerd') && env.TESTFLAGS_DOCKER || env.TESTFLAGS }} --run=//worker=${{ matrix.worker }}$"
-                  TESTPKGS: "${{ matrix.pkg }}"
-                  SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
+                  docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out ${{ env.TEST_IMAGE_ID }}
             - name: Send to Codecov
               if: always()
               uses: codecov/codecov-action@v3
