@@ -31,8 +31,6 @@ target "_common" {
 	}
 }
 
-
-
 group "default" {
 	targets = ["binaries"]
 }
@@ -175,14 +173,14 @@ target "meta-helper" {
 	tags = ["${DOCKER_IMAGE}:local"]
 }
 
-target "builder" {
+target "integration-test" {
 	inherits   = ["_common"]
-	dockerfile = "./hack/dockerfiles/builder.Dockerfile"
-	output     = ["type=image"]
+	target = "integration-test"
+	output     = ["type=cacheonly"]
 }
 
 target "integration" {
-	inherits = ["_common", "builder"]
+	inherits = ["_common"]
 	dockerfile = "Dockerfile"
 	target   = "test-output"
 	output   = ["${DESTDIR}/integration"]

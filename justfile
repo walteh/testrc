@@ -68,6 +68,5 @@ validate: lint outdated validate-vendor validate-docs validate-gen
 
 
 integration:
-	cd tests && docker compose up
-	# docker buildx bake integration
-	# (cd tests && docker compose down)
+	docker buildx bake integration-test --set "*.output=type=docker,name=integ-tests"
+	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock "integ-tests"

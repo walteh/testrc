@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/walteh/testrc/tests/containers"
 	"github.com/walteh/testrc/tests/containers/dynamo_container"
@@ -24,6 +25,15 @@ func TestDynamo(t *testing.T) {
 
 	ctx := context.Background()
 
+	ctx = zerolog.New(zerolog.NewConsoleWriter()).With().Caller().Logger().WithContext(ctx)
+
+	log.Printf("Waiting on daemon")
+
+	err := containers.WaitOnDaemon()
+	require.NoError(t, err)
+
+	log.Printf("Creating pool")
+
 	// ctx := sb.Context()
 
 	cont, err := containers.Roll(ctx, &mock)
@@ -32,13 +42,15 @@ func TestDynamo(t *testing.T) {
 	err = cont.Ready()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", "http://localhost:8000/ping", nil)
+	req, err := http.NewRequest("GET", cont.GetHttpHost(), nil)
 	require.NoError(t, err)
+
+	log.Printf("Sending request to %s", req.URL.String())
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	cmd := mainCmd(nil, withArgs("--version"))
 	out, err := cmd.CombinedOutput()

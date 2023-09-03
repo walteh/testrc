@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -12,15 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/rs/zerolog"
 
 	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 )
-
-// type Container interface {
-// 	MockContainerConfig() (repo string, http int, https int, env []string)
-// 	MockContainerPing() error
-// }
 
 type ContainerImage interface {
 	Tag() string
@@ -44,48 +42,123 @@ func (c *ContainerStore) Ready() error {
 
 var pool *dockertest.Pool
 
-func init() {
-	p, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("Could not construct pool: %s", err)
-	}
-	pool = p
+var ready = make(chan error)
 
-	// wait for sigterm, then purge all resources
-	osSignal := make(chan os.Signal, 1)
+func WaitOnDaemon() error {
 
-	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
+	wrk := sync.OnceFunc(func() {
 
-	go func() {
-		<-osSignal
-		fmt.Println()
-		fmt.Println("===============================================")
-		fmt.Println("|  Stopping Mock Containers...")
-		fmt.Println("|")
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-		grp := sync.WaitGroup{}
+		endpoint := os.Getenv("DOCKER_HOST")
 
-		for _, c := range containers {
-			grp.Add(1)
-			go func(c *ContainerStore) {
-				defer func() {
-					grp.Done()
-					fmt.Printf("|  🛑 %s is stopped\n", c.resource.Container.AppArmorProfile)
-				}()
-				// You can't defer this because os.Exit doesn't care for defer
-				if err := pool.Purge(c.resource); err != nil {
-					log.Fatalf("Could not purge resource: %s", err)
+		if endpoint == "" {
+			endpoint = "/var/run/docker.sock"
+		}
+		log.Printf("Using docker endpoint: %s", endpoint)
+		// check if the docker daemon is running
+		if _, err := os.Stat(endpoint); err != nil {
+
+			dir, err := os.MkdirTemp("", "dockerd")
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			dae, err := dockerd.NewDaemon(dir, func(d *dockerd.Daemon) {
+
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			logs := map[string]*bytes.Buffer{}
+
+			if err := dae.StartWithError(logs); err != nil {
+				log.Fatal(err)
+			}
+
+			endpoint = dae.Sock()
+
+			go func() {
+				for {
+					//print logs
+					for name, buf := range logs {
+						if buf.Len() != 0 {
+							log.Printf("name: %s, logs: %s", name, buf.String())
+							logs[name].Reset()
+						}
+					}
+
 				}
-			}(c)
+			}()
+		} else {
+			endpoint = "unix://" + endpoint
 		}
 
-		grp.Wait()
-		fmt.Println("|")
-		fmt.Println("|  mock containers stopped")
-		fmt.Println("===============================================")
-		fmt.Println()
-		os.Exit(0)
-	}()
+		log.Printf("starting docker pool")
+
+		p, err := dockertest.NewPool(endpoint)
+		if err != nil {
+			log.Fatalf("Could not construct pool: %s", err)
+		}
+		pool = p
+
+		for {
+			if err := pool.Client.Ping(); err != nil {
+				log.Printf("a Could not connect to Docker, retrying: %s", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			break
+		}
+
+		log.Printf("docker daemon is ready")
+
+		// wait for sigterm, then purge all resources
+		osSignal := make(chan os.Signal, 1)
+
+		signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
+
+		go func() {
+			<-osSignal
+			fmt.Println()
+			fmt.Println("===============================================")
+			fmt.Println("|  Stopping Mock Containers...")
+			fmt.Println("|")
+
+			grp := sync.WaitGroup{}
+
+			for _, c := range containers {
+				grp.Add(1)
+				go func(c *ContainerStore) {
+					defer func() {
+						grp.Done()
+						fmt.Printf("|  🛑 %s is stopped\n", c.resource.Container.AppArmorProfile)
+					}()
+					// You can't defer this because os.Exit doesn't care for defer
+					if err := pool.Purge(c.resource); err != nil {
+						log.Fatalf("Could not purge resource: %s", err)
+					}
+				}(c)
+			}
+
+			grp.Wait()
+			fmt.Println("|")
+			fmt.Println("|  mock containers stopped")
+			fmt.Println("===============================================")
+			fmt.Println()
+			os.Exit(0)
+		}()
+
+		log.Printf("docker pool ready")
+
+		ready <- nil
+
+	})
+
+	go wrk()
+
+	return <-ready
 }
 
 var containers = make(map[string]*ContainerStore, 0)
@@ -104,7 +177,7 @@ func SetContainer(container ContainerImage, store *ContainerStore) {
 
 func (me *ContainerStore) GetHttpHost() string {
 	// return strings.Replace(GetContainer(container).http, "http://", "", 1)
-	return strings.Replace(me.http, "http://", "", 1)
+	return me.http
 }
 
 func (me *ContainerStore) GetHttpsHost() string {
@@ -119,8 +192,6 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")
 		return nil, err
 	}
-
-	// repo, httpPort, httpsPort, envVars := reg.MockContainerConfig()
 
 	ctx = zerolog.Ctx(ctx).With().Str("image", reg.Tag()).Int("http", reg.HttpPort()).Logger().WithContext(ctx)
 
@@ -149,6 +220,8 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		tag = "latest"
 	}
 
+	zerolog.Ctx(ctx).Info().Msg("Creating new container")
+
 	// Create the container
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository:   r,
@@ -156,6 +229,8 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		Env:          filteredEnvVars,
 		ExposedPorts: []string{fmt.Sprintf("%d/tcp", reg.HttpPort()), fmt.Sprintf("%d/tcp", reg.HttpsPort())},
 		Cmd:          cmdArgs,
+	}, func(hc *docker.HostConfig) {
+		hc.AutoRemove = true
 	})
 	if err != nil {
 		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not set up resource")
@@ -186,11 +261,11 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		defer func() {
 			newContainer.ready <- nil
 		}()
-		zerolog.Ctx(ctx).Info().Msg("Container is ready")
+		zerolog.Ctx(ctx).Info().Msg("Waiting for container to be ready")
 
 		// Exponential backoff-retry
 		if err := pool.Retry(func() error {
-			zerolog.Ctx(ctx).Info().Msg("Waiting for container")
+			zerolog.Ctx(ctx).Info().Msg("Waiting for container... (retrying)")
 			return reg.Ping(ctx, newContainer)
 		}); err != nil {
 			zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")

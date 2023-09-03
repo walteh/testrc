@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+: "${BUILDX_CMD=docker buildx}"
+: "${TEST_IMAGE_ID=check-the-tests}"
+: "${PACKAGES=./...}"
+: "${BIN_NAME=testrc}"
+: "${TEST_KEEP_CACHE=1}"
+
+cacheVolume="${BIN_NAME}-test-cache"
+
+${BUILDX_CMD} bake integration-test --set "*.output=type=docker,name=$TEST_IMAGE_ID"
+
+# Function to create Docker volume with appropriate paths
+create_docker_volume() {
+	local volumeArgs="$1"
+	if docker --debug create "$volumeArgs" --name "$cacheVolume" alpine:latest; then
+		echo "Cache volume created successfully."
+		if [ "$TEST_KEEP_CACHE" != "1" ]; then
+			echo "Cleaning up cache volume $cacheVolume"
+			trap 'docker rm -v $cacheVolume || echo "problem removing volume"' EXIT
+		fi
+	else
+		echo "Warning: Failed to create cache volume. Proceeding without cache. This may be slow."
+		docker rmi alpine:latest >/dev/null 2>/dev/null || true
+	fi
+}
+
+# Check if the cache volume already exists
+if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
+	echo "Attempting to create cache volume $cacheVolume"
+	volumeArgs="-v /root/.cache -v /root/.cache/registry -v /go/pkg/mod"
+	create_docker_volume "$volumeArgs"
+fi
+
+docker run --privileged -v "$cacheVolume" "$TEST_IMAGE_ID"
