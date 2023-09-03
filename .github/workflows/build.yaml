@@ -31,6 +31,7 @@ env:
     REPO_SLUG: ${{ github.repository }}
     DESTDIR: "./bin"
     TEST_CACHE_SCOPE: "test"
+    DOCKERHUB_USERNAME: walteh
 
 jobs:
     test:
@@ -43,19 +44,6 @@ jobs:
             GOTESTSUM_FORMAT: "standard-verbose"
             TEST_IMAGE_BUILD: "0"
             TEST_IMAGE_ID: "buildx-tests"
-        # strategy:
-        #     fail-fast: false
-        #     matrix:
-        #         worker:
-        #             - docker
-        #             - docker\+containerd # same as docker, but with containerd snapshotter
-        #             - docker-container
-        #             - remote
-        #         pkg:
-        #             - ./tests
-        #         include:
-        #             - pkg: ./...
-        #               skip-integration-tests: 1
         steps:
             - name: Checkout
               uses: actions/checkout@v3
@@ -76,18 +64,9 @@ jobs:
                   version: ${{ env.BUILDX_VERSION }}
                   driver-opts: image=${{ env.BUILDKIT_IMAGE }}
                   buildkitd-flags: --debug
-            - name: Build test image
-              uses: docker/bake-action@v3
-              with:
-                  files: |
-                      ./docker-bake.hcl
-                  targets: test
-                  set: |
-                      *.cache-from=type=gha,scope=${{ env.TEST_CACHE_SCOPE }}
-                      *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
             - name: Test
               run: |
-                  docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out ${{ env.TEST_IMAGE_ID }}
+                  just test
             - name: Send to Codecov
               if: always()
               uses: codecov/codecov-action@v3
@@ -233,7 +212,7 @@ jobs:
             - name: Login to DockerHub
               uses: docker/login-action@v2
               with:
-                  username: ${{ secrets.DOCKERHUB_USERNAME }}
+                  username: ${{ env.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_PASSWORD }}
             - name: Login to GHCR
               uses: docker/login-action@v2
