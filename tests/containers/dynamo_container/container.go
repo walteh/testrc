@@ -9,13 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
-var _ containers.Container = (*MockContainer)(nil)
+var _ containers.ContainerImage = (*MockContainer)(nil)
 
 var global *MockContainer
-
-// func init() {
-// 	global = containers.RegisterContainer(&MockContainer{})
-// }
 
 type MockContainer struct{}
 
@@ -23,7 +19,23 @@ func (me *MockContainer) MockContainerConfig() (repo string, http int, https int
 	return "amazon/dynamodb-local", 8000, 8000, []string{}
 }
 
-func (me *MockContainer) MockContainerPing() error {
-	_, err := newMockClient(aws.AwsConfig(), containers.GetHttp(me)).DescribeLimits(context.Background(), &dynamodb.DescribeLimitsInput{})
+func (me *MockContainer) Tag() string {
+	return "amazon/dynamodb-local:latest"
+}
+
+func (me *MockContainer) HttpPort() int {
+	return 8000
+}
+
+func (me *MockContainer) HttpsPort() int {
+	return 8000
+}
+
+func (me *MockContainer) EnvVars() []string {
+	return []string{}
+}
+
+func (me *MockContainer) Ping(ctx context.Context, store *containers.ContainerStore) error {
+	_, err := newMockClient(aws.AwsConfig(), store.GetHttpHost()).DescribeLimits(context.Background(), &dynamodb.DescribeLimitsInput{})
 	return err
 }

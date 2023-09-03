@@ -1,10 +1,12 @@
 package tests
 
 import (
+	"context"
+	"log"
+	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 	"github.com/walteh/testrc/tests/containers"
 	"github.com/walteh/testrc/tests/containers/dynamo_container"
@@ -12,22 +14,33 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-var dynamoTests = []func(t *testing.T, sb integration.Sandbox){
-	testDynamo,
+func init() {
+	log.SetFlags(log.Lshortfile)
 }
 
-func testDynamo(t *testing.T, sb integration.Sandbox) {
+func TestDynamo(t *testing.T) {
 
 	mock := dynamo_container.MockContainer{}
 
-	ctx := sb.Context()
+	ctx := context.Background()
 
-	cont, err := containers.Roll(ctx, sb, []containers.Container{&mock})
+	// ctx := sb.Context()
+
+	cont, err := containers.Roll(ctx, &mock)
 	require.NoError(t, err)
 
-	defer cont()
+	err = cont.Ready()
+	require.NoError(t, err)
 
-	cmd := mainCmd(sb, withArgs("--version"))
+	req, err := http.NewRequest("GET", "http://localhost:8000/ping", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	cmd := mainCmd(nil, withArgs("--version"))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 

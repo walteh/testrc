@@ -31,6 +31,8 @@ target "_common" {
 	}
 }
 
+
+
 group "default" {
 	targets = ["binaries"]
 }
@@ -151,7 +153,6 @@ target "image-default" {
 	platforms = ["linux/arm64"]
 }
 
-
 target "image-cross" {
 	inherits = ["meta-helper", "binaries-cross"]
 	target   = "entry"
@@ -163,48 +164,40 @@ target "image-local" {
 	output   = ["type=docker"]
 }
 
-variable "HTTP_PROXY" {
-	default = ""
-}
-variable "HTTPS_PROXY" {
-	default = ""
-}
-variable "NO_PROXY" {
-	default = ""
-}
-
-target "integration-test-base" {
-	inherits = ["_common"]
-	args = {
-		HTTP_PROXY  = HTTP_PROXY
-		HTTPS_PROXY = HTTPS_PROXY
-		NO_PROXY    = NO_PROXY
-	}
-	target = "integration-test-base"
-	output = ["type=cacheonly"]
-}
-
-target "integration-test" {
-	inherits = ["integration-test-base"]
-	target   = "integration-test"
-}
-
-
-target "test" {
-	inherits = ["_common"]
-	target   = "test-starter"
-	output   = ["type=cacheonly"]
-}
-
-
 target "meta" {
 	inherits = ["_common"]
 	target   = "meta-out"
 	output = [ "meta"]
 }
 
-
 # Special target: https://github.com/docker/metadata-action#bake-definition
 target "meta-helper" {
 	tags = ["${DOCKER_IMAGE}:local"]
+}
+
+target "builder" {
+	inherits   = ["_common"]
+	dockerfile = "./hack/dockerfiles/builder.Dockerfile"
+	output     = ["type=image"]
+}
+
+target "integration" {
+	inherits = ["_common", "builder"]
+	dockerfile = "Dockerfile"
+	target   = "test-output"
+	output   = ["${DESTDIR}/integration"]
+	args = {
+		TEST_REPORT_SUFFIX = "-integration"
+		PACKAGES		   = "./tests/..."
+	}
+}
+
+target "unit" {
+	inherits = ["_common"]
+	target   = "test-output"
+	output   = ["${DESTDIR}/unit"]
+	args = {
+		TEST_REPORT_SUFFIX = "-unit"
+		PACKAGES		   = "./pkg/..."
+	}
 }

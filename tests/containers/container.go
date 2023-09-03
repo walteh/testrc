@@ -1,263 +1,205 @@
 package containers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"reflect"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
-	"github.com/fatih/color"
-	"github.com/moby/buildkit/util/testutil/dockerd"
-	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/rs/zerolog"
 
 	"github.com/ory/dockertest/v3"
 )
 
-type Container interface {
-	MockContainerConfig() (repo string, http int, https int, env []string)
-	MockContainerPing() error
+// type Container interface {
+// 	MockContainerConfig() (repo string, http int, https int, env []string)
+// 	MockContainerPing() error
+// }
+
+type ContainerImage interface {
+	Tag() string
+	HttpPort() int
+	HttpsPort() int
+	EnvVars() []string
+	Ping(ctx context.Context, store *ContainerStore) error
 }
 
 type ContainerStore struct {
 	http     string
 	https    string
-	self     Container
+	image    ContainerImage
 	resource *dockertest.Resource
+	ready    chan error
 }
 
-// var registry = make([]Container, 0)
-var containers = make(map[string]*ContainerStore, 0)
-
-// func RegisterContainer[C Container](container C) C {
-
-// 	registry = append(registry, container)
-
-// 	return container
-// }
-
-func GetHttp(container Container) string {
-	repo, _, _, _ := container.MockContainerConfig()
-	return containers[repo].http
+func (c *ContainerStore) Ready() error {
+	return <-c.ready
 }
 
-func GetHttpHost(container Container) string {
-	repo, _, _, _ := container.MockContainerConfig()
-	return strings.Replace(containers[repo].http, "http://", "", 1)
-}
+var pool *dockertest.Pool
 
-func GetHttps(container Container) string {
-	repo, _, _, _ := container.MockContainerConfig()
-	return containers[repo].https
-}
-
-func GetHttpsHost(container Container) string {
-	repo, _, _, _ := container.MockContainerConfig()
-	return strings.Replace(containers[repo].https, "https://", "", 1)
-}
-
-// func ContainerTestMain(sb integration.Sandbox, runner func() int) int {
-// 	a, err := wrapTestMain(sb)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	res := runner()
-
-// 	err = a()
-// 	if err != nil {
-// 		log.Println("error cleaning up: ", err)
-
-// 	}
-
-// 	return res
-// }
-
-func Roll(ctx context.Context, sb integration.Sandbox, reg []Container) (func() error, error) {
-	fmt.Println()
-	fmt.Println("===============================================")
-	fmt.Println("|  Starting Mock Containers...")
-	fmt.Println("|")
-
-	start := time.Now()
-
-	ok, err := dockerd.NewDaemon("")
-	if err != nil {
-		log.Fatalf("Could not start daemon: %s", err)
-	}
-
-	logs := map[string]*bytes.Buffer{}
-
-	err = ok.StartWithError(logs)
-	if err != nil {
-		log.Fatalf("Could not start daemon: %s", err)
-	}
-	go func() {
-		// read logs
-		for {
-			time.Sleep(1 * time.Second)
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				for k, v := range logs {
-					if v.Len() == 0 {
-						continue
-					}
-					fmt.Printf("|  %s: %s\n", k, v.String())
-					v.Reset()
-				}
-			}
-		}
-	}()
-
-	defer func() {
-		err := ok.StopWithError()
-		if err != nil {
-			log.Println("error stopping daemon: ", err)
-		}
-	}()
-
-	<-time.After(5 * time.Second)
-
-	// addr := sb.Address()
-
-	// addr = strings.Replace(addr, "tcp://", "http://", 1)
-
-	// pp.Println("SB", addr, sb)
-
-	// dirname, err := os.UserHomeDir()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
-	// pool, err := dockertest.NewPool(fmt.Sprintf("unix:///%s/.colima/default/docker.sock", dirname))
-	pool, err := dockertest.NewPool(ok.Sock())
+func init() {
+	p, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("Could not construct pool: %s", err)
 	}
+	pool = p
 
-	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
-	if err != nil {
-		log.Fatalf("Could not connect to Docker: %s", err)
-	}
+	// wait for sigterm, then purge all resources
+	osSignal := make(chan os.Signal, 1)
 
-	resources := []*dockertest.Resource{}
+	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
 
-	grp := sync.WaitGroup{}
-
-	for _, container := range reg {
-
-		repo, http, https, env := container.MockContainerConfig()
-
-		if c, ok := containers[repo]; ok {
-			fmt.Printf("|  🆗 reusing %s @ :%s => :%d\n", repo, c.resource.GetHostPort(fmt.Sprintf("%d/tcp", http)), http)
-			continue
-		}
-
-		cmd := []string{}
-		env2 := []string{}
-		for _, e := range env {
-			if strings.HasPrefix(e, "cmd=") {
-				cmd = append(cmd, strings.Split(strings.Replace(e, "cmd=", "", 1), " ")...)
-			} else {
-				env2 = append(env2, e)
-			}
-		}
-
-		r, err := pool.RunWithOptions(&dockertest.RunOptions{
-			Repository: repo,
-			Tag:        "latest",
-			Env:        env2,
-			ExposedPorts: []string{
-				fmt.Sprintf("%d/tcp", http),
-				fmt.Sprintf("%d/tcp", https),
-			},
-			Cmd: cmd,
-		})
-		if err != nil {
-			log.Fatalf("Could not setup resource: %s", err)
-		}
-
-		err = r.Expire(600) // 10 minutes
-		if err != nil {
-			log.Fatalf("Could not set expiration: %s", err)
-		}
-
-		resources = append(resources, r)
-		grp.Add(1)
-
-		// r.Container.AppArmorProfile = color.Bold(color.DarkBlue, repo)
-		r.Container.AppArmorProfile = color.BlueString(repo)
-		fmt.Printf("|  🆕 starting %s @ :%s => :%d\n", r.Container.AppArmorProfile, r.GetPort(fmt.Sprintf("%d/tcp", http)), http)
-
-		containers[repo] = &ContainerStore{
-			http:     fmt.Sprintf("http://%s", r.GetHostPort(fmt.Sprintf("%d/tcp", http))),
-			https:    fmt.Sprintf("https://%s", r.GetHostPort(fmt.Sprintf("%d/tcp", https))),
-			self:     container,
-			resource: r,
-		}
-
-		go func(container Container) {
-			defer func() {
-				grp.Done()
-				fmt.Printf("|  ✅ %s is ready\n", r.Container.AppArmorProfile)
-			}()
-
-			// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-			if err := pool.Retry(func() error {
-				fmt.Printf("|  🕒 waiting on %s\n", r.Container.AppArmorProfile)
-				err := container.MockContainerPing()
-				if err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
-				log.Fatalf("Could not connect to docker: %s", err)
-			}
-		}(container)
-	}
-
-	grp.Wait()
-
-	fmt.Println("|")
-	fmt.Println("|  mock containers started in ", time.Since(start)*time.Nanosecond)
-	fmt.Println("===============================================")
-	fmt.Println()
-
-	return func() error {
-
-		start := time.Now()
+	go func() {
+		<-osSignal
 		fmt.Println()
 		fmt.Println("===============================================")
 		fmt.Println("|  Stopping Mock Containers...")
 		fmt.Println("|")
 
-		grp = sync.WaitGroup{}
+		grp := sync.WaitGroup{}
 
-		for _, resource := range resources {
+		for _, c := range containers {
 			grp.Add(1)
-			go func(resource *dockertest.Resource) {
+			go func(c *ContainerStore) {
 				defer func() {
 					grp.Done()
-					fmt.Printf("|  🛑 %s is stopped\n", resource.Container.AppArmorProfile)
+					fmt.Printf("|  🛑 %s is stopped\n", c.resource.Container.AppArmorProfile)
 				}()
 				// You can't defer this because os.Exit doesn't care for defer
-				if err := pool.Purge(resource); err != nil {
+				if err := pool.Purge(c.resource); err != nil {
 					log.Fatalf("Could not purge resource: %s", err)
 				}
-			}(resource)
+			}(c)
 		}
 
 		grp.Wait()
 		fmt.Println("|")
-		fmt.Println("|  mock containers stopped in ", time.Since(start)*time.Nanosecond)
+		fmt.Println("|  mock containers stopped")
 		fmt.Println("===============================================")
 		fmt.Println()
-		return nil
+		os.Exit(0)
+	}()
+}
 
-	}, nil
+var containers = make(map[string]*ContainerStore, 0)
+
+func getContainerName(container ContainerImage) string {
+	return reflect.TypeOf(container).String()
+}
+
+func GetContainer(container ContainerImage) *ContainerStore {
+	return containers[getContainerName(container)]
+}
+
+func SetContainer(container ContainerImage, store *ContainerStore) {
+	containers[getContainerName(container)] = store
+}
+
+func (me *ContainerStore) GetHttpHost() string {
+	// return strings.Replace(GetContainer(container).http, "http://", "", 1)
+	return strings.Replace(me.http, "http://", "", 1)
+}
+
+func (me *ContainerStore) GetHttpsHost() string {
+	return strings.Replace(me.https, "https://", "", 1)
+}
+
+func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
+	startTime := time.Now()
+
+	// Ping the Docker client
+	if err := pool.Client.Ping(); err != nil {
+		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")
+		return nil, err
+	}
+
+	// repo, httpPort, httpsPort, envVars := reg.MockContainerConfig()
+
+	ctx = zerolog.Ctx(ctx).With().Str("image", reg.Tag()).Int("http", reg.HttpPort()).Logger().WithContext(ctx)
+
+	// Check for existing containers
+	if existingContainer := GetContainer(reg); existingContainer != nil {
+		zerolog.Ctx(ctx).Info().Msg("Reusing existing container")
+		return existingContainer, nil
+	}
+
+	// Prepare environment and command arrays
+	var cmdArgs, filteredEnvVars []string
+	for _, envVar := range reg.EnvVars() {
+		if strings.HasPrefix(envVar, "cmd=") {
+			cmdArgs = append(cmdArgs, strings.Split(strings.Replace(envVar, "cmd=", "", 1), " ")...)
+		} else {
+			filteredEnvVars = append(filteredEnvVars, envVar)
+		}
+	}
+	var r, tag string
+	splt := strings.Split(reg.Tag(), ":")
+	if len(splt) == 2 {
+		r = splt[0]
+		tag = splt[1]
+	} else {
+		r = reg.Tag()
+		tag = "latest"
+	}
+
+	// Create the container
+	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository:   r,
+		Tag:          tag,
+		Env:          filteredEnvVars,
+		ExposedPorts: []string{fmt.Sprintf("%d/tcp", reg.HttpPort()), fmt.Sprintf("%d/tcp", reg.HttpsPort())},
+		Cmd:          cmdArgs,
+	})
+	if err != nil {
+		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not set up resource")
+		return nil, err
+	}
+
+	// Set expiration for the resource
+	if err := resource.Expire(600); err != nil {
+		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not set expiration")
+		return nil, err
+	}
+
+	zerolog.Ctx(ctx).Info().Msg("Starting new container")
+
+	// Populate the container store
+	newContainer := &ContainerStore{
+		http:     fmt.Sprintf("http://%s", resource.GetHostPort(fmt.Sprintf("%d/tcp", reg.HttpPort()))),
+		https:    fmt.Sprintf("https://%s", resource.GetHostPort(fmt.Sprintf("%d/tcp", reg.HttpsPort()))),
+		image:    reg,
+		resource: resource,
+		ready:    make(chan error),
+	}
+
+	SetContainer(reg, newContainer)
+
+	// Start the container
+	go func() {
+		defer func() {
+			newContainer.ready <- nil
+		}()
+		zerolog.Ctx(ctx).Info().Msg("Container is ready")
+
+		// Exponential backoff-retry
+		if err := pool.Retry(func() error {
+			zerolog.Ctx(ctx).Info().Msg("Waiting for container")
+			return reg.Ping(ctx, newContainer)
+		}); err != nil {
+			zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")
+		}
+	}()
+
+	zerolog.Ctx(ctx).Info().
+		Dur("elapsedTime", time.Since(startTime)).
+		Msg("Mock containers started")
+
+	return newContainer, nil
 }

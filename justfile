@@ -64,3 +64,10 @@ install: binaries
 generate: vendor docs gen
 
 validate: lint outdated validate-vendor validate-docs validate-gen
+
+
+
+integration:
+	cd tests && docker compose up
+	# docker buildx bake integration
+	# (cd tests && docker compose down)

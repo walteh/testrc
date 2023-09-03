@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"testing"
 
 	"github.com/walteh/testrc/pkg/dynamo"
-	"github.com/walteh/testrc/tests/containers"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -17,9 +15,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewMockAPI(t *testing.T, ctx context.Context, cfg aws.Config, input *dynamodb.CreateTableInput) dynamo.DynamoDBAPIProvisioner {
-	return containers.WrapTestClient(t, ctx, newMockClient(cfg, containers.GetHttp(global)), input)
-}
+// func NewMockAPI(t *testing.T, ctx context.Context, cfg aws.Config, input *dynamodb.CreateTableInput) dynamo.DynamoDBAPIProvisioner {
+// 	return containers.WrapTestClient(t, ctx, newMockClient(cfg, containers.GetHttp(global)), input)
+// }
 
 func PrintScanAsTable(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tbl string) {
 	zerolog.Ctx(ctx).Info().Msg("Scanning table " + tbl)

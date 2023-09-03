@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
 
+##################################################################
+# SETUP
+##################################################################
+
 ARG GO_VERSION=1.21.0
 ARG XX_VERSION=1.2.1
 
@@ -31,6 +35,9 @@ FROM --platform=$BUILDPLATFORM docker/buildx-bin:latest AS buildx-bin
 
 FROM --platform=$BUILDPLATFORM docker/compose-bin:latest AS compose-bin
 
+##################################################################
+# BINARIES
+##################################################################
 
 FROM gobase AS meta
 ARG TARGETPLATFORM
@@ -87,10 +94,13 @@ FROM binaries-$TARGETOS AS binaries
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 
-
 ##################################################################
 # TESTING
 ##################################################################
+
+
+FROM scratch AS test-coverage
+COPY --from=test /tmp/coverage.txt /coverage.txt
 
 FROM gobase AS gotestsum
 ARG GOTESTSUM_VERSION
@@ -100,64 +110,72 @@ RUN --mount=target=/root/.cache,type=cache <<EOT
 	/out/gotestsum --version
 EOT
 
+
+# FROM gobase AS docker
+# ARG TARGETPLATFORM
+# ARG DOCKER_VERSION
+# WORKDIR /opt/docker
+# RUN <<EOT
+# CASE=${TARGETPLATFORM:-linux/amd64}
+# DOCKER_ARCH=$(
+# 	case ${CASE} in
+# 	"linux/amd64") echo "x86_64" ;;
+# 	"linux/arm/v6") echo "armel" ;;
+# 	"linux/arm/v7") echo "armhf" ;;
+# 	"linux/arm64/v8") echo "aarch64" ;;
+# 	"linux/arm64") echo "aarch64" ;;
+# 	"linux/ppc64le") echo "ppc64le" ;;
+# 	"linux/s390x") echo "s390x" ;;
+# 	*) echo "" ;; esac
+# )
+# echo "DOCKER_ARCH=$DOCKER_ARCH" &&
+# wget -qO- "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz" | tar xvz --strip 1
+# EOT
+# RUN ./dockerd --version && ./containerd --version && ./ctr --version && ./runc --version
+
+# FROM gobase AS integration-test-base
+# ARG BIN_NAME
+# # https://github.com/docker/docker/blob/master/project/PACKAGERS.md#runtime-dependencies
+# RUN apk add --no-cache \
+# 	btrfs-progs \
+# 	e2fsprogs \
+# 	e2fsprogs-extra \
+# 	ip6tables \
+# 	iptables \
+# 	openssl \
+# 	shadow-uidmap \
+# 	xfsprogs \
+# 	xz
+# COPY --link --from=gotestsum /out/gotestsum /usr/bin/
+# COPY --link --from=registry /bin/registry /usr/bin/
+# COPY --link --from=docker /opt/docker/* /usr/bin/
+# COPY --link --from=buildkit /usr/bin/buildkitd /usr/bin/
+# COPY --link --from=buildkit /usr/bin/buildctl /usr/bin/
+# COPY --link --from=binaries /${BIN_NAME} /usr/bin/
+# COPY --link --from=buildx-bin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+# COPY --link  --from=compose-bin /docker-compose /usr/libexec/docker/cli-plugins/docker-compose
+
+# FROM integration-test-base AS integration-test
+# COPY . .
+
+
 FROM gobase AS test
-ENV SKIP_INTEGRATION_TESTS=1
+ARG PACKAGES
+COPY --from=gotestsum /out/gotestsum /usr/bin/gotestsum
 RUN --mount=type=bind,target=. \
+	--mount=type=bind,target=/var/run/docker.sock \
 	--mount=type=cache,target=/root/.cache \
-	--mount=type=cache,target=/go/pkg/mod <<EOT
-	go test -v -coverprofile=/tmp/coverage.txt -covermode=atomic ./... &&
-	go tool cover -func=/tmp/coverage.txt
-EOT
+	--mount=type=cache,target=/go/pkg/mod \
+	ls /var/run/docker.sock && \
+	gotestsum \
+	--format=pkgname \
+	--packages="$PACKAGES" \
+	--jsonfile=/testreports/go-test-report.json \
+	--junitfile=/testreports/junit-report.xml \
+	-- -v -mod=vendor -coverprofile=/testreports/coverage-report.txt -covermode=atomic ./...
 
-FROM scratch AS test-coverage
-COPY --from=test /tmp/coverage.txt /coverage.txt
-
-FROM gobase AS docker
-ARG TARGETPLATFORM
-ARG DOCKER_VERSION
-WORKDIR /opt/docker
-RUN <<EOT
-CASE=${TARGETPLATFORM:-linux/amd64}
-DOCKER_ARCH=$(
-	case ${CASE} in
-	"linux/amd64") echo "x86_64" ;;
-	"linux/arm/v6") echo "armel" ;;
-	"linux/arm/v7") echo "armhf" ;;
-	"linux/arm64/v8") echo "aarch64" ;;
-	"linux/arm64") echo "aarch64" ;;
-	"linux/ppc64le") echo "ppc64le" ;;
-	"linux/s390x") echo "s390x" ;;
-	*) echo "" ;; esac
-)
-echo "DOCKER_ARCH=$DOCKER_ARCH" &&
-wget -qO- "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz" | tar xvz --strip 1
-EOT
-RUN ./dockerd --version && ./containerd --version && ./ctr --version && ./runc --version
-
-FROM gobase AS integration-test-base
-ARG BIN_NAME
-# https://github.com/docker/docker/blob/master/project/PACKAGERS.md#runtime-dependencies
-RUN apk add --no-cache \
-	btrfs-progs \
-	e2fsprogs \
-	e2fsprogs-extra \
-	ip6tables \
-	iptables \
-	openssl \
-	shadow-uidmap \
-	xfsprogs \
-	xz
-COPY --link --from=gotestsum /out/gotestsum /usr/bin/
-COPY --link --from=registry /bin/registry /usr/bin/
-COPY --link --from=docker /opt/docker/* /usr/bin/
-COPY --link --from=buildkit /usr/bin/buildkitd /usr/bin/
-COPY --link --from=buildkit /usr/bin/buildctl /usr/bin/
-COPY --link --from=binaries /${BIN_NAME} /usr/bin/
-COPY --link --from=buildx-bin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
-COPY --link  --from=compose-bin /docker-compose /usr/libexec/docker/cli-plugins/docker-compose
-
-FROM integration-test-base AS integration-test
-COPY . .
+FROM scratch AS test-output
+COPY --from=test /testreports /testreports
 
 ##################################################################
 # RELEASE
