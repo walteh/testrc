@@ -20,7 +20,7 @@ func (me *LocalAwsCredentialProvider) Retrieve(ctx context.Context) (aws.Credent
 	}, nil
 }
 
-func AwsConfig() aws.Config {
+func V2Config() aws.Config {
 
 	cfg := aws.NewConfig()
 	cfg.Region = "us-east-1"

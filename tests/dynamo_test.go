@@ -8,32 +8,19 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"github.com/walteh/testrc/tests/containers"
-	"github.com/walteh/testrc/tests/containers/dynamo_container"
+	"github.com/walteh/testrc/pkg/docker"
+	dynamodb_image "github.com/walteh/testrc/pkg/images/dynamodb"
 )
-
-func init() {
-	log.SetFlags(log.Lshortfile)
-}
 
 func TestDynamo(t *testing.T) {
 
-	mock := dynamo_container.MockContainer{}
+	mock := dynamodb_image.DockerImage{}
 
 	ctx := context.Background()
 
 	ctx = zerolog.New(zerolog.NewConsoleWriter()).With().Caller().Logger().WithContext(ctx)
 
-	log.Printf("Waiting on daemon")
-
-	err := containers.WaitOnDaemon()
-	require.NoError(t, err)
-
-	log.Printf("Creating pool")
-
-	// ctx := sb.Context()
-
-	cont, err := containers.Roll(ctx, &mock)
+	cont, err := docker.Roll(ctx, &mock)
 	require.NoError(t, err)
 
 	defer cont.Close()

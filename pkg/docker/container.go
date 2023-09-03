@@ -1,19 +1,13 @@
-package containers
+package docker
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"reflect"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/rs/zerolog"
 
 	"github.com/ory/dockertest/v3"
@@ -25,7 +19,8 @@ type ContainerImage interface {
 	HttpPort() int
 	HttpsPort() int
 	EnvVars() []string
-	Ping(ctx context.Context, store *ContainerStore) error
+	Ping(ctx context.Context) error
+	OnStart(z *ContainerStore)
 }
 
 type ContainerStore struct {
@@ -34,114 +29,11 @@ type ContainerStore struct {
 	image    ContainerImage
 	resource *dockertest.Resource
 	ready    chan error
+	pool     *dockertest.Pool
 }
 
 func (c *ContainerStore) Ready() error {
 	return <-c.ready
-}
-
-var pool *dockertest.Pool
-
-var ready = make(chan error)
-
-func WaitOnDaemon() error {
-
-	wrk := sync.OnceFunc(func() {
-
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-		endpoint := os.Getenv("DOCKER_HOST")
-
-		if endpoint == "" {
-			endpoint = "/var/run/docker.sock"
-		}
-		log.Printf("Using docker endpoint: %s", endpoint)
-		// check if the docker daemon is running
-		if _, err := os.Stat(endpoint); err != nil {
-
-			dir, err := os.MkdirTemp("", "dockerd")
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			dae, err := dockerd.NewDaemon(dir, func(d *dockerd.Daemon) {
-
-			})
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			logs := map[string]*bytes.Buffer{}
-
-			if err := dae.StartWithError(logs); err != nil {
-				log.Fatal(err)
-			}
-
-			endpoint = dae.Sock()
-
-			go func() {
-				for {
-					//print logs
-					for name, buf := range logs {
-						if buf.Len() != 0 {
-							log.Printf("name: %s, logs: %s", name, buf.String())
-							logs[name].Reset()
-						}
-					}
-
-				}
-			}()
-		} else {
-			endpoint = "unix://" + endpoint
-		}
-
-		log.Printf("starting docker pool")
-
-		p, err := dockertest.NewPool(endpoint)
-		if err != nil {
-			log.Fatalf("Could not construct pool: %s", err)
-		}
-		pool = p
-
-		for {
-			if err := pool.Client.Ping(); err != nil {
-				log.Printf("a Could not connect to Docker, retrying: %s", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			break
-		}
-
-		log.Printf("docker daemon is ready")
-
-		// wait for sigterm, then purge all resources
-		osSignal := make(chan os.Signal, 1)
-
-		signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
-
-		log.Printf("docker pool ready")
-
-		ready <- nil
-
-	})
-
-	go wrk()
-
-	return <-ready
-}
-
-var containers = make(map[string]*ContainerStore, 0)
-
-func getContainerName(container ContainerImage) string {
-	return reflect.TypeOf(container).String()
-}
-
-func GetContainer(container ContainerImage) *ContainerStore {
-	return containers[getContainerName(container)]
-}
-
-func SetContainer(container ContainerImage, store *ContainerStore) {
-	containers[getContainerName(container)] = store
 }
 
 func (me *ContainerStore) GetHttpHost() string {
@@ -155,19 +47,30 @@ func (me *ContainerStore) GetHttpsHost() string {
 func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 	startTime := time.Now()
 
+	endpoint := os.Getenv("DOCKER_HOST")
+
+	if endpoint == "" {
+		endpoint = "unix:///var/run/docker.sock"
+	}
+
+	p, err := dockertest.NewPool(endpoint)
+	if err != nil {
+		log.Fatalf("Could not construct pool: %s", err)
+	}
+
+	if err := p.Client.Ping(); err != nil {
+		return nil, err
+	}
+
+	log.Printf("docker daemon is ready")
+
 	// Ping the Docker client
-	if err := pool.Client.Ping(); err != nil {
+	if err := p.Client.Ping(); err != nil {
 		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")
 		return nil, err
 	}
 
 	ctx = zerolog.Ctx(ctx).With().Str("image", reg.Tag()).Int("http", reg.HttpPort()).Logger().WithContext(ctx)
-
-	// Check for existing containers
-	if existingContainer := GetContainer(reg); existingContainer != nil {
-		zerolog.Ctx(ctx).Info().Msg("Reusing existing container")
-		return existingContainer, nil
-	}
 
 	// Prepare environment and command arrays
 	var cmdArgs, filteredEnvVars []string
@@ -191,7 +94,7 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 	zerolog.Ctx(ctx).Info().Msg("Creating new container")
 
 	// Create the container
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+	resource, err := p.RunWithOptions(&dockertest.RunOptions{
 		Repository:   r,
 		Tag:          tag,
 		Env:          filteredEnvVars,
@@ -220,9 +123,10 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		image:    reg,
 		resource: resource,
 		ready:    make(chan error),
+		pool:     p,
 	}
 
-	SetContainer(reg, newContainer)
+	reg.OnStart(newContainer)
 
 	// Start the container
 	go func() {
@@ -232,9 +136,9 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 		zerolog.Ctx(ctx).Info().Msg("Waiting for container to be ready")
 
 		// Exponential backoff-retry
-		if err := pool.Retry(func() error {
+		if err := p.Retry(func() error {
 			zerolog.Ctx(ctx).Info().Msg("Waiting for container... (retrying)")
-			return reg.Ping(ctx, newContainer)
+			return reg.Ping(ctx)
 		}); err != nil {
 			zerolog.Ctx(ctx).Fatal().Err(err).Msg("Could not connect to Docker")
 		}
@@ -248,5 +152,5 @@ func Roll(ctx context.Context, reg ContainerImage) (*ContainerStore, error) {
 }
 
 func (me *ContainerStore) Close() error {
-	return pool.Purge(me.resource)
+	return me.pool.Purge(me.resource)
 }

@@ -1,12 +1,10 @@
-package dynamo_container
+package dynamodb
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"sort"
-
-	"github.com/walteh/testrc/pkg/dynamo"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -15,11 +13,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// func NewMockAPI(t *testing.T, ctx context.Context, cfg aws.Config, input *dynamodb.CreateTableInput) dynamo.DynamoDBAPIProvisioner {
-// 	return containers.WrapTestClient(t, ctx, newMockClient(cfg, containers.GetHttp(global)), input)
-// }
-
-func PrintScanAsTable(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tbl string) {
+func (me *DockerImage) PrintScanAsTable(ctx context.Context, tbl string) {
 	zerolog.Ctx(ctx).Info().Msg("Scanning table " + tbl)
 
 	input := &dynamodb.ScanInput{TableName: aws.String(tbl)}
@@ -30,7 +24,13 @@ func PrintScanAsTable(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tb
 	header := map[string]int{}
 	rows := make([]map[string]interface{}, 0)
 
-	paginator := dynamodb.NewScanPaginator(svc, input)
+	cli, err := me.NewClient()
+	if err != nil {
+		fmt.Printf("failed to create client: %v", err)
+		return
+	}
+
+	paginator := dynamodb.NewScanPaginator(cli, input)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -102,8 +102,14 @@ func PrintScanAsTable(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tb
 	t.Render()
 }
 
-func PrintTableCounts(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tbl string) {
+func (me *DockerImage) PrintTableCounts(ctx context.Context, tbl string) {
 	zerolog.Ctx(ctx).Info().Msg("Scanning table " + tbl)
+
+	cli, err := me.NewClient()
+	if err != nil {
+		fmt.Printf("failed to create client: %v", err)
+		return
+	}
 
 	input := &dynamodb.ScanInput{
 		TableName: aws.String(tbl),
@@ -115,7 +121,7 @@ func PrintTableCounts(ctx context.Context, svc dynamo.DynamoDBAPIProvisioner, tb
 	header := make(map[string]int, 0)
 	headerNull := make(map[string]int, 0)
 
-	paginator := dynamodb.NewScanPaginator(svc, input)
+	paginator := dynamodb.NewScanPaginator(cli, input)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
