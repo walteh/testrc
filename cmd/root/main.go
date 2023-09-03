@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"github.com/walteh/buildrc/pkg/git"
 	myversion "github.com/walteh/buildrc/version"
 	"github.com/walteh/snake"
+	"github.com/walteh/testrc/cmd/root/install"
 )
 
 type Root struct {
@@ -33,6 +33,8 @@ func (me *Root) BuildCommand(ctx context.Context) *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&me.Debug, "debug", "d", false, "Print debug output")
 	cmd.PersistentFlags().BoolVarP(&me.Version, "version", "v", false, "Print version and exit")
 	cmd.PersistentFlags().StringVarP(&me.GitDir, "git-dir", "g", ".", "The git directory to use")
+
+	snake.NewCommand(ctx, cmd, "install", &install.Handler{})
 
 	cmd.SetOutput(os.Stdout)
 
@@ -59,12 +61,6 @@ func (me *Root) ParseArguments(ctx context.Context, cmd *cobra.Command, args []s
 
 	root := afero.NewOsFs()
 
-	gpv, err := git.NewGitGoGitProvider(afero.NewOsFs(), me.GitDir)
-	if err != nil {
-		return err
-	}
-
-	ctx = snake.Bind(ctx, (*git.GitProvider)(nil), gpv)
 	ctx = snake.Bind(ctx, (*afero.Fs)(nil), root)
 
 	cmd.SetContext(ctx)

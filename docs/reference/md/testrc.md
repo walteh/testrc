@@ -16,3 +16,7 @@ testrc [flags]
   -v, --version          Print version and exit
 ```
 
+### SEE ALSO
+
+* [testrc install](testrc_install.md)	 - install og
+

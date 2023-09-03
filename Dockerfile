@@ -150,8 +150,6 @@ FROM binaries
 ##################################################################
 
 FROM scratch AS entry
-ARG BIN_NAME
-ENV BIN_NAME=${BIN_NAME}
 COPY --link --from=meta /meta /meta
 COPY --link --from=builder /usr/bin/$(cat meta/name) /usr/bin/
-ENTRYPOINT [ "/usr/bin/${BIN_NAME}" ]
+ENTRYPOINT [ "/usr/bin/$(cat meta/name)" ]
