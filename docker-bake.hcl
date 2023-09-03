@@ -103,12 +103,6 @@ target "outdated" {
 	output     = ["${DESTDIR}/outdated"]
 }
 
-/* target "test" {
-	inherits = ["_common"]
-	target   = "test-coverage"
-	output   = ["${DESTDIR}/coverage"]
-} */
-
 target "binaries" {
 	inherits  = ["_common"]
 	target    = "binaries"
@@ -177,29 +171,25 @@ target "meta-helper" {
 	tags = ["${DOCKER_IMAGE}:local"]
 }
 
-target "test" {
+target "tester" {
 	inherits = ["_common"]
-	target   = "test"
-	output   = ["type=docker,name=integration-test"]
+	target   = "test-runner"
 }
 
-/* target "integration" {
-	inherits   = ["_common"]
-	dockerfile = "Dockerfile"
-	target     = "test-output"
-	output     = ["${DESTDIR}/integration"]
+target "integration-test" {
+	inherits = ["_common", "tester"]
 	args = {
-		TEST_REPORT_SUFFIX = "-integration"
-		PACKAGES           = "./tests/..."
+		TEST_RUN = "TestIntegration*"
+		DESTDIR  = "${DESTDIR}/testreports/integration"
 	}
+	output = ["type=docker,name=integration-test"]
 }
 
-target "unit" {
-	inherits = ["_common"]
-	target   = "test-output"
-	output   = ["${DESTDIR}/unit"]
+target "unit-test" {
+	inherits = ["_common", "tester"]
 	args = {
-		TEST_REPORT_SUFFIX = "-unit"
-		PACKAGES           = "./pkg/..."
+		TEST_RUN = "TestUnit*"
+		DESTDIR  = "${DESTDIR}/testreports/unit"
 	}
-} */
+	output = ["type=docker,name=unit-test"]
+}

@@ -12,7 +12,7 @@ import (
 	dynamodb_image "github.com/walteh/testrc/pkg/images/dynamodb"
 )
 
-func TestDynamo(t *testing.T) {
+func TestIntegrationDynamo(t *testing.T) {
 
 	mock := dynamodb_image.DockerImage{}
 

@@ -8,7 +8,7 @@ ARG GO_VERSION=1.21.0
 ARG XX_VERSION=1.2.1
 
 ARG DOCKER_VERSION=24.0.5
-ARG GOTESTSUM_VERSION=v1.9.0
+ARG GOTESTSUM_VERSION=v1.10.1
 ARG REGISTRY_VERSION=latest
 ARG BUILDKIT_VERSION=nightly
 
@@ -98,9 +98,6 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 # TESTING
 ##################################################################
 
-FROM scratch AS test-coverage
-COPY --from=test /tmp/coverage.txt /coverage.txt
-
 FROM gobase AS gotestsum
 ARG GOTESTSUM_VERSION
 ENV GOFLAGS=
@@ -109,18 +106,21 @@ RUN --mount=target=/root/.cache,type=cache <<EOT
 	/out/gotestsum --version
 EOT
 
-FROM gobase AS test
+FROM gobase AS test-runner
 COPY --link --from=binaries /${BIN_NAME} /usr/bin/
 COPY --link --from=gotestsum /out/gotestsum /usr/bin/
+COPY --link --from=meta /meta /meta
 COPY . .
-ARG PACKAGES
-ENV PACKAGES=${PACKAGES:-./...}
-ARG BIN_NAME
-ENV BIN_NAME=${BIN_NAME}
-ENTRYPOINT ["sh", "hack/test"]
-
-FROM scratch AS test-output
-COPY --from=test /testreports /testreports
+ARG TEST_RUN
+ENV TEST_RUN=${TEST_RUN}
+ARG DESTDIR
+ENV DESTDIR=${DESTDIR}
+ENTRYPOINT gotestsum \
+	--format=standard-verbose \
+	--jsonfile=${DESTDIR}/go-test-report.json \
+	--junitfile=${DESTDIR}/junit-report.xml \
+	-- -v -mod=vendor -coverprofile=${DESTDIR}/coverage-report.txt -covermode=atomic \
+	./... -run ${TEST_RUN}
 
 ##################################################################
 # RELEASE

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-func TestVersion(t *testing.T) {
+func TestUnitVersion(t *testing.T) {
 	cmd := mainCmd(nil, withArgs("--version"))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))

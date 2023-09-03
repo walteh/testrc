@@ -40,18 +40,6 @@ outdated:
 gen:
     docker buildx bake update-gen
 
-test-driver:
-    ./hack/test-driver
-
-test:
-    ./hack/test
-
-test-unit:
-    TESTPKGS=./... SKIP_INTEGRATION_TESTS=1 ./hack/test
-
-test-integration:
-	TEST_DOCKERD=1 TESTFLAGS="--run=//worker=docker-container" TESTPKGS=./tests ./hack/test
-
 local:
 	docker buildx bake image-default --progress plain
 
@@ -59,12 +47,19 @@ meta:
     docker buildx bake meta  --progress plain
 
 install: binaries
-	./bin/build/buildrc install && buildrc --version
+	binname=$(docker buildx bake _common --print | jq -cr '.target._common.args.BIN_NAME') && \
+	./bin/build/${binname} install && ${binname} --version
 
 generate: vendor docs gen
 
 validate: lint outdated validate-vendor validate-docs validate-gen
 
-integration:
-	docker buildx bake test
-	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out test
+unit-test:
+	docker buildx bake unit-test --set "*.args.DESTDIR=/out"
+	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out unit-test
+
+integration-test:
+	docker buildx bake integration-test --set "*.args.DESTDIR=/out"
+	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out integration-test
+
+test: unit-test integration-test
