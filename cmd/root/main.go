@@ -34,7 +34,7 @@ func (me *Root) BuildCommand(ctx context.Context) *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&me.Version, "version", "v", false, "Print version and exit")
 	cmd.PersistentFlags().StringVarP(&me.GitDir, "git-dir", "g", ".", "The git directory to use")
 
-	snake.NewCommand(ctx, cmd, "install", &install.Handler{})
+	snake.MustNewCommand(ctx, cmd, "install", &install.Handler{})
 
 	cmd.SetOutput(os.Stdout)
 
