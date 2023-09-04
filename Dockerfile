@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:labs
 
 ##################################################################
 # SETUP
@@ -150,6 +150,8 @@ FROM binaries
 ##################################################################
 
 FROM scratch AS entry
+ARG BIN_NAME=$(cat /meta/name)
+ENV BIN_NAME=${BIN_NAME}
 COPY --link --from=meta /meta /meta
-COPY --link --from=builder /usr/bin/$(cat meta/name) /usr/bin/
-ENTRYPOINT [ "/usr/bin/$(cat meta/name)" ]
+COPY --link --from=builder /usr/bin/${BIN_NAME} /usr/bin/
+ENTRYPOINT [ "/usr/bin/${BIN_NAME}" ]

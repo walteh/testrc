@@ -1,19 +1,26 @@
-all: binaries
+##################################################################
+# GENERATE
+##################################################################
 
-build:
-    ./hack/build
+generate: vendor docs gen meta
 
-shell:
-    ./hack/shell
+gen:
+    docker buildx bake update-gen
 
-binaries:
-    docker buildx bake binaries
+meta:
+    docker buildx bake meta
 
-binaries-cross:
-    docker buildx bake binaries-cross
+vendor:
+    ./hack/update-vendor
 
-release:
-    ./hack/release $(PLATFORM) $(TARGET)
+docs:
+    ./hack/update-docs
+
+##################################################################
+# VALIDATE
+##################################################################
+
+validate: lint validate-vendor validate-docs validate-gen
 
 lint:
     docker buildx bake lint
@@ -27,32 +34,15 @@ validate-docs:
 validate-gen:
     docker buildx bake validate-gen
 
-vendor:
-    ./hack/update-vendor
-
-docs:
-    ./hack/update-docs
-
 outdated:
 	docker buildx bake outdated
 	cat ./bin/outdated/outdated.txt
 
-gen:
-    docker buildx bake update-gen
+##################################################################
+# TEST
+##################################################################
 
-local:
-	docker buildx bake image-default --progress plain
-
-meta:
-    docker buildx bake meta  --progress plain
-
-install: binaries
-	binname=$(docker buildx bake _common --print | jq -cr '.target._common.args.BIN_NAME') && \
-	./bin/build/${binname} install && ${binname} --version
-
-generate: vendor docs gen
-
-validate: lint outdated validate-vendor validate-docs validate-gen
+test: unit-test integration-test
 
 unit-test:
 	docker buildx bake unit-test --set "*.args.DESTDIR=/out"
@@ -62,4 +52,22 @@ integration-test:
 	docker buildx bake integration-test --set "*.args.DESTDIR=/out"
 	docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./bin:/out integration-test
 
-test: unit-test integration-test
+##################################################################
+# BUILD
+##################################################################
+
+binaries:
+    docker buildx bake binaries
+
+binaries-cross:
+    docker buildx bake binaries-cross
+
+release:
+    ./hack/release $(PLATFORM) $(TARGET)
+
+local:
+	docker buildx bake image-default
+
+install: binaries
+	binname=$(docker buildx bake _common --print | jq -cr '.target._common.args.BIN_NAME') && \
+	./bin/build/${binname} install && ${binname} --version
