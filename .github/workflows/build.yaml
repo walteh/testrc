@@ -37,10 +37,11 @@ jobs:
     test:
         runs-on: ubuntu-22.04
         needs:
-            - binaries
+            - build
+            - prepare-build
         strategy:
             matrix:
-                level: [unit, integration]
+                level: ${{ fromJson(needs.prepare-build.outputs.test_matrix) }}
         env:
             TESTFLAGS: "-v --parallel=6 --timeout=30m"
             TESTFLAGS_DOCKER: "-v --parallel=1 --timeout=30m"
@@ -48,159 +49,155 @@ jobs:
             TEST_IMAGE_BUILD: "0"
             TEST_IMAGE_ID: "buildx-tests"
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 0
-            - name: Download binaries
+            - name: download binaries
               uses: actions/download-artifact@v3
               with:
                   name: buildx
                   path: rebin
-            - name: Set up QEMU
+            - name: set up qemu
               uses: docker/setup-qemu-action@v2
-            - name: Install just
+            - name: set up just
               uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
+            - name: set up buildx
               uses: docker/setup-buildx-action@v2
+            - name: bake ${{ matrix.level }}
+              uses: docker/bake-action@v3
               with:
-                  version: ${{ env.BUILDX_VERSION }}
-                  driver-opts: image=${{ env.BUILDKIT_IMAGE }}
-                  buildkitd-flags: --debug
-            - name: Test
-              run: |
-                  just ${{ matrix.level }}-test
-            - name: Send to Codecov
+                  files: ./docker-bake.hcl
+                  targets: ${{ matrix.level }}
+                  set: |
+                      *.output=type=docker,name=${{matrix.level}}
+                      *.cache-from=type=gha
+                      *.cache-to=type=gha,mode=max
+            - name: run tests
+              run: docker run --network host -v /var/run/docker.sock:/var/run/docker.sock -v ./testout:/out ${{matrix.level}}
+            - name: send to codecov
               if: always()
               uses: codecov/codecov-action@v3
               with:
-                  directory: ./bin/testreports/${{ matrix.level }}
-            - name: Generate annotations
+                  directory: ./testout
+            - name: generate annotations
               if: always()
               uses: crazy-max/.github/.github/actions/gotest-annotations@1a64ea6d01db9a48aa61954cb20e265782c167d9
               with:
-                  directory: ./bin/testreports/${{ matrix.level }}
-            - name: Upload test reports
+                  directory: ./testout
+            - name: upload test reports
               if: always()
               uses: actions/upload-artifact@v3
               with:
                   name: test-reports
-                  path: ./bin/testreports
+                  path: ./testout
 
-    prepare-binaries:
+    prepare-build:
         runs-on: ubuntu-22.04
         outputs:
-            matrix: ${{ steps.platforms.outputs.matrix }}
+            build_matrix: ${{ steps.platforms.outputs.build_matrix }}
+            test_matrix: ${{ steps.platforms.outputs.test_matrix }}
+            validate_matrix: ${{ steps.platforms.outputs.validate_matrix }}
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
-            - name: Create matrix
+            - name: checkout
+              uses: actions/checkout@v4
+            - name: create matrix
               id: platforms
               run: |
-                  echo "matrix=$(docker buildx bake binaries-cross --print | jq -cr '.target."binaries-cross".platforms')" >>${GITHUB_OUTPUT}
-            - name: Show matrix
+                  echo "build_matrix=$(docker buildx bake release --print | jq -cr '.target.release.platforms')" >>${GITHUB_OUTPUT}
+                  echo "test_matrix=$(docker buildx bake test --print | jq -cr '.group.test.targets')" >>${GITHUB_OUTPUT}
+                  echo "validate_matrix=$(docker buildx bake validate --print | jq -cr '.group.validate.targets')" >>${GITHUB_OUTPUT}
+            - name: show matrix
               run: |
-                  echo ${{ steps.platforms.outputs.matrix }}
+                  echo "build_matrix = ${{ steps.platforms.outputs.build_matrix }}"
+                  echo "test_matrix = ${{ steps.platforms.outputs.test_matrix }}"
+                  echo "validate_matrix = ${{ steps.platforms.outputs.validate_matrix }}"
 
-    meta:
-        runs-on: ubuntu-22.04
-        outputs:
-            version: ${{ steps.bake.outputs.version }}
-            revision: ${{ steps.bake.outputs.revision }}
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v3
-              with:
-                  fetch-depth: 0
-            - name: Set up QEMU
-              uses: docker/setup-qemu-action@v2
-            - name: Install just
-              uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v2
-              with:
-                  version: ${{ env.BUILDX_VERSION }}
-                  driver-opts: image=${{ env.BUILDKIT_IMAGE }}
-                  buildkitd-flags: --debug
-            - name: Build
-              id: bake
-              run: |
-                  just meta
-                  echo "version=$(cat ./meta/version)" >> $GITHUB_OUTPUT
-                  echo "revision=$(cat ./meta/revision)" >> $GITHUB_OUTPUT
-
-    binaries:
+    build:
         runs-on: ubuntu-22.04
         needs:
-            - prepare-binaries
+            - prepare-build
         strategy:
             fail-fast: false
             matrix:
-                platform: ${{ fromJson(needs.prepare-binaries.outputs.matrix) }}
+                platform: ${{ fromJson(needs.prepare-build.outputs.build_matrix) }}
         steps:
-            - name: Prepare
+            - name: prepare
               id: prepare
               run: |
                   platform=${{ matrix.platform }}
                   echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_OUTPUT
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 0
-            - name: Set up QEMU
+            - name: set up qemu
               uses: docker/setup-qemu-action@v2
-            - name: Install just
+            - name: set up just
               uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
+            - name: set up buildx
               uses: docker/setup-buildx-action@v2
+            - name: bake release
+              uses: docker/bake-action@v3
               with:
-                  version: ${{ env.BUILDX_VERSION }}
-                  driver-opts: image=${{ env.BUILDKIT_IMAGE }}
-                  buildkitd-flags: --debug
-            - name: Build
-              run: |
-                  just release
-              env:
-                  PLATFORMS: ${{ matrix.platform }}
-                  CACHE_FROM: type=gha,scope=binaries-${{ steps.prepare.outputs.PLATFORM_PAIR }}
-                  CACHE_TO: type=gha,scope=binaries-${{ steps.prepare.outputs.PLATFORM_PAIR }},mode=max
-            - name: Upload artifacts
+                  files: ./docker-bake.hcl
+                  targets: release
+                  set: |
+                      *.output=type=local,dest=./rebin/
+                      *.platform=${{ matrix.platform }}
+                      *.cache-from=type=gha,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+                      *.cache-to=type=gha,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }},mode=max
+            - name: bake package
+              uses: docker/bake-action@v3
+              with:
+                  files: ./docker-bake.hcl
+                  targets: package
+                  set: |
+                      *.contexts.released=./rebin/
+                      *.cache-from=type=gha,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+                      *.cache-to=type=gha,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }},mode=max
+
+            - name: upload artifacts
               uses: actions/upload-artifact@v3
               with:
                   name: buildx
                   path: ${{ env.DESTDIR }}/*
                   if-no-files-found: error
 
-    bin-image:
+    registry:
         runs-on: ubuntu-22.04
         needs:
-            - meta
             - release
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with: { fetch-depth: 0 }
-            - name: Download binaries
+            - name: download build
               uses: actions/download-artifact@v3
               with:
                   name: buildx
                   path: rebin
             - name: check
               run: ls -la rebin
-            - name: Set up QEMU
+            - name: set up qemu
               uses: docker/setup-qemu-action@v2
-            - name: Install just
+            - name: set up just
               uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
+            - name: set up buildx
               uses: docker/setup-buildx-action@v2
+            - name: bake meta
+              uses: docker/bake-action@v3
               with:
-                  version: ${{ env.BUILDX_VERSION }}
-                  driver-opts: image=${{ env.BUILDKIT_IMAGE }}
-                  buildkitd-flags: --debug
-            - name: Docker meta
-              id: meta
+                  files: ./docker-bake.hcl
+                  targets: meta
+                  set: |
+                      *.output=type=local,dest=./meta-output
+            - id: meta
+              run: |
+                  echo "version=$(cat ./meta-output/meta/version)" >> $GITHUB_OUTPUT
+                  echo "revision=$(cat ./meta-output/meta/revision)" >> $GITHUB_OUTPUT
+            - name: docker meta
+              id: docker-meta
               uses: docker/metadata-action@v4
               with:
                   images: |
@@ -209,27 +206,26 @@ jobs:
                   tags: |
                       type=ref,event=branch
                       type=ref,event=pr
-                      type=semver,pattern={{version}},value=${{ needs.meta.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+                      type=semver,pattern={{version}},value=${{ steps.meta.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
                       type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
                   bake-target: meta-helper
-            - name: Login to DockerHub
+            - name: login to dockerhub
               uses: docker/login-action@v2
               with:
                   username: ${{ env.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_PASSWORD }}
-            - name: Login to GHCR
+            - name: login to ghcr
               uses: docker/login-action@v2
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
-            - name: Build and push image
+            - name: bake registry and push
               uses: docker/bake-action@v3
               with:
-                  files: |
-                      ./docker-bake.hcl
+                  files: ./docker-bake.hcl
                       ${{ steps.meta.outputs.bake-file }}
-                  targets: image-cross
+                  targets: registry
                   push: true
                   sbom: true
                   set: |
@@ -239,28 +235,43 @@ jobs:
     release:
         runs-on: ubuntu-22.04
         needs:
-            - meta
             - test
-            - binaries
+            - build
             - validate
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with: { fetch-depth: 0 }
-            - name: Download binaries
+            - name: download build
               uses: actions/download-artifact@v3
               with:
                   name: buildx
                   path: ${{ env.DESTDIR }}
-            - name: Create checksums
-              run: ./hack/hash
-            - name: List artifacts
+            - name: set up buildx
+              uses: docker/setup-buildx-action@v2
+            - name: bake meta
+              uses: docker/bake-action@v3
+              with:
+                  files: ./docker-bake.hcl
+                  targets: meta
+                  set: |
+                      *.output=type=local,dest=./meta-output
+            - id: meta
               run: |
-                  tree -nh ${{ env.DESTDIR }}
-            - name: Check artifacts
-              run: |
-                  find ${{ env.DESTDIR }} -type f -exec file -e ascii -- {} +
-            - name: GitHub Release
+                  echo "version=$(cat ./meta-output/meta/version)" >> $GITHUB_OUTPUT
+                  echo "revision=$(cat ./meta-output/meta/revision)" >> $GITHUB_OUTPUT
+            - name: bake
+              uses: docker/bake-action@v3
+              with:
+                  files: ./docker-bake.hcl
+                  targets: checksum
+                  set: |
+                      *.output=type=local,dest=${{ env.DESTDIR }}
+            - name: list artifacts
+              run: tree -nh ${{ env.DESTDIR }}
+            - name: check artifacts
+              run: find ${{ env.DESTDIR }} -type f -exec file -e ascii -- {} +
+            - name: github release
               #   if: startsWith(github.ref, 'refs/tags/v')
               uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v0.1.15
               env:
@@ -269,22 +280,22 @@ jobs:
                   draft: false
                   prerelease: true
                   files: ${{ env.DESTDIR }}/*
-                  tag_name: ${{ needs.meta.outputs.version }}
+                  tag_name: ${{ steps.meta.outputs.version }}
                   target_commitish: ${{ github.sha }}
-                  name: ${{ needs.meta.outputs.version }}
+                  name: ${{ steps.meta.outputs.version }}
 
     buildkit-edge:
         runs-on: ubuntu-22.04
         continue-on-error: true
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with: { fetch-depth: 0 }
-            - name: Set up QEMU
+            - name: set up qemu
               uses: docker/setup-qemu-action@v2
-            - name: Install just
+            - name: set up just
               uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
+            - name: set up buildx
               uses: docker/setup-buildx-action@v2
               with:
                   version: ${{ env.BUILDX_VERSION }}
@@ -294,31 +305,28 @@ jobs:
               name: Build
               uses: docker/bake-action@v3
               with:
-                  files: |
-                      ./docker-bake.hcl
-                  targets: binaries
+                  files: ./docker-bake.hcl
+                  targets: build
 
     validate:
         runs-on: ubuntu-22.04
-        needs: [prepare-binaries]
+        needs: [prepare-build]
         strategy:
             fail-fast: false
             matrix:
-                target:
-                    - lint
-                    - validate-vendor
-                    - validate-docs
-                    - validate-gen
+                target: ${{ fromJson(needs.prepare-build.outputs.validate_matrix) }}
         steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+            - name: checkout
+              uses: actions/checkout@v4
               with: { fetch-depth: 0 }
-            - name: Install just
+            - name: set up just
               uses: taiki-e/install-action@just
-            - name: Set up Docker Buildx
+            - name: set up buildx
               uses: docker/setup-buildx-action@v2
               with:
                   version: latest
-            - name: Run
-              run: |
-                  just ${{ matrix.target }}
+            - name: build
+              uses: docker/bake-action@v3
+              with:
+                  files: ./docker-bake.hcl
+                  targets: ${{ matrix.target }}
