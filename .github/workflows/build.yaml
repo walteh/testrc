@@ -198,7 +198,7 @@ jobs:
                   echo "revision=$(cat ./meta-output/meta/revision)" >> $GITHUB_OUTPUT
             - name: docker meta
               id: docker-meta
-              uses: docker/metadata-action@v4
+              uses: docker/metadata-action@v5
               with:
                   images: |
                       ${{ env.REPO_SLUG }}
