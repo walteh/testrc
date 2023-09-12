@@ -63,7 +63,7 @@ jobs:
             - name: set up just
               uses: taiki-e/install-action@just
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
             - name: bake ${{ matrix.level }}
               uses: docker/bake-action@v3
               with:
@@ -136,7 +136,7 @@ jobs:
             - name: set up just
               uses: taiki-e/install-action@just
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
             - name: bake release
               uses: docker/bake-action@v3
               with:
@@ -184,7 +184,7 @@ jobs:
             - name: set up just
               uses: taiki-e/install-action@just
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
             - name: bake meta
               uses: docker/bake-action@v3
               with:
@@ -248,7 +248,7 @@ jobs:
                   name: buildx
                   path: ${{ env.DESTDIR }}
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
             - name: bake meta
               uses: docker/bake-action@v3
               with:
@@ -296,7 +296,7 @@ jobs:
             - name: set up just
               uses: taiki-e/install-action@just
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
               with:
                   version: ${{ env.BUILDX_VERSION }}
                   driver-opts: image=moby/buildkit:master
@@ -322,7 +322,7 @@ jobs:
             - name: set up just
               uses: taiki-e/install-action@just
             - name: set up buildx
-              uses: docker/setup-buildx-action@v2
+              uses: docker/setup-buildx-action@v3
               with:
                   version: latest
             - name: build
